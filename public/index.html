@@ -1,0 +1,1450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<meta name="theme-color" content="#07070f"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<title>SnapVault</title>
+<link rel="manifest" href="/manifest.webmanifest"/>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#07070f;--bg2:#0d0d1c;--surf:#121220;--surf2:#191929;
+  --bdr:rgba(255,255,255,.07);--bdr2:rgba(255,255,255,.13);
+  --acc:#7c6eff;--acc2:#ff6b9d;--acc3:#00d4aa;
+  --txt:#eeeef5;--mu:#55557a;--mu2:#8888aa;
+  --ok:#00d4aa;--err:#ff4d6d;--warn:#ffb347;
+  --r:14px;--r2:20px;
+  --F:'Outfit',sans-serif;--M:'JetBrains Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:var(--bg);color:var(--txt);font-family:var(--F);overflow:hidden}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:radial-gradient(ellipse 70% 45% at 15% -5%,rgba(124,110,255,.09) 0%,transparent 60%),
+             radial-gradient(ellipse 55% 35% at 85% 105%,rgba(255,107,157,.07) 0%,transparent 60%)}
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;opacity:.4;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E")}
+
+/* ── SCREENS ── */
+.screen{position:fixed;inset:0;display:flex;flex-direction:column;overflow:hidden;z-index:1;
+  transition:opacity .22s,transform .22s}
+.screen.hidden{opacity:0;pointer-events:none;transform:translateY(12px)}
+.fcenter{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 20px}
+
+/* ── LOGO ── */
+.logo{font-size:40px;font-weight:900;letter-spacing:-2.5px;
+  background:linear-gradient(130deg,#7c6eff 0%,#ff6b9d 55%,#00d4aa 100%);
+  background-clip:text;-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:3px}
+.logo-sub{font-family:var(--M);font-size:11px;color:var(--mu);letter-spacing:3px;
+  text-transform:uppercase;margin-bottom:36px}
+
+/* ── CARD ── */
+.card{width:100%;max-width:400px;background:var(--surf);border:1px solid var(--bdr2);
+  border-radius:var(--r2);padding:26px 22px;display:flex;flex-direction:column;gap:13px;
+  box-shadow:0 28px 72px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.04)}
+
+/* ── FORM ── */
+.lbl{font-family:var(--M);font-size:10px;color:var(--mu);letter-spacing:1.5px;
+  text-transform:uppercase;margin-bottom:5px}
+.inp{width:100%;padding:11px 14px;background:var(--bg);border:1px solid var(--bdr2);
+  border-radius:10px;color:var(--txt);font-family:var(--F);font-size:14px;outline:none;
+  transition:border-color .2s}
+.inp:focus{border-color:var(--acc)}
+.inp::placeholder{color:var(--mu)}
+select.inp{cursor:pointer}
+
+/* ── BUTTONS ── */
+.btn{width:100%;padding:13px;border:none;border-radius:10px;font-family:var(--F);
+  font-size:14px;font-weight:700;cursor:pointer;transition:all .15s;letter-spacing:.2px}
+.btn-g{background:linear-gradient(135deg,var(--acc),var(--acc2));color:#fff;
+  box-shadow:0 4px 18px rgba(124,110,255,.28)}
+.btn-g:hover{transform:translateY(-1px);box-shadow:0 7px 26px rgba(124,110,255,.4)}
+.btn-g:active,.btn-g:disabled{transform:none;box-shadow:none;opacity:.5}
+.btn-ghost{background:transparent;border:1px solid var(--bdr2);color:var(--txt)}
+.btn-ghost:hover{border-color:var(--acc);color:var(--acc)}
+.btn-danger{background:rgba(255,77,109,.09);border:1px solid rgba(255,77,109,.22);color:var(--err)}
+.btn-danger:hover{background:rgba(255,77,109,.17)}
+.btn-sm{padding:9px 12px;background:var(--surf2);border:1px solid var(--bdr2);border-radius:9px;
+  color:var(--mu2);font-family:var(--F);font-size:12px;font-weight:600;cursor:pointer;
+  transition:all .15s;white-space:nowrap}
+.btn-sm:hover{border-color:var(--acc);color:var(--acc)}
+
+/* auth tabs */
+.tab-row{display:flex;gap:3px;background:var(--bg);border-radius:10px;padding:3px}
+.tab-btn{flex:1;padding:8px;border:none;background:transparent;color:var(--mu);
+  font-family:var(--F);font-size:13px;font-weight:600;border-radius:7px;cursor:pointer;transition:all .2s}
+.tab-btn.on{background:var(--surf2);color:var(--txt)}
+
+.fmsg{font-family:var(--M);font-size:11px;text-align:center;min-height:16px}
+.fmsg.e{color:var(--err)}.fmsg.s{color:var(--ok)}
+
+/* ═══════════════════════════
+   STORAGE PICKER SCREEN
+═══════════════════════════ */
+.st-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}
+.st-opt{padding:18px 8px;border:1px solid var(--bdr2);border-radius:var(--r);background:var(--bg2);
+  cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:8px;
+  transition:all .2s;color:var(--mu2);font-size:12px;font-weight:700;text-align:center}
+.st-opt .ico{font-size:26px}
+.st-opt:hover{border-color:var(--acc);color:var(--txt);transform:translateY(-2px)}
+.st-opt.sel-supa{border-color:var(--acc);background:rgba(124,110,255,.12);color:var(--acc)}
+.st-opt.sel-gd{border-color:#34a853;background:rgba(52,168,83,.1);color:#34a853}
+.st-opt.sel-od{border-color:#0078d4;background:rgba(0,120,212,.1);color:#0078d4}
+
+.info-box{background:var(--bg2);border:1px solid var(--bdr2);border-radius:10px;
+  padding:12px 14px;font-family:var(--M);font-size:11px;color:var(--mu2);line-height:1.8}
+.info-box strong{color:var(--txt)}
+.info-box a{color:var(--acc);text-decoration:none}
+
+/* ═══════════════════════════
+   MAIN APP
+═══════════════════════════ */
+/* topbar */
+.topbar{display:flex;align-items:center;justify-content:space-between;
+  padding:14px 18px 10px;flex-shrink:0;
+  background:linear-gradient(to bottom,var(--bg) 0%,transparent 100%)}
+.topbar-logo{font-size:20px;font-weight:900;letter-spacing:-1.2px;
+  background:linear-gradient(90deg,var(--acc),var(--acc2));
+  background-clip:text;-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.demo-chip{padding:4px 8px;border-radius:20px;font-family:var(--M);font-size:10px;
+  border:1px solid rgba(255,179,71,.4);background:rgba(255,179,71,.12);color:var(--warn);
+  letter-spacing:.7px;white-space:nowrap}
+.topbar-right{display:flex;align-items:center;gap:9px}
+.online-pill{padding:4px 10px;border-radius:20px;font-family:var(--M);font-size:10px;
+  display:flex;align-items:center;gap:5px;border:1px solid var(--bdr2);background:var(--surf)}
+.odot{width:6px;height:6px;border-radius:50%;background:var(--ok);flex-shrink:0;transition:background .3s}
+.odot.off{background:var(--err)}
+.icon-btn{width:34px;height:34px;border-radius:9px;background:var(--surf);border:1px solid var(--bdr2);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;color:var(--mu2)}
+.icon-btn:hover{border-color:var(--acc);color:var(--acc)}
+
+/* nav */
+.nav{display:flex;padding:5px 12px;gap:2px;flex-shrink:0}
+.nav-btn{flex:1;padding:7px 4px;border:none;background:transparent;color:var(--mu);
+  font-family:var(--F);font-size:11px;font-weight:600;cursor:pointer;border-radius:10px;
+  transition:all .2s;display:flex;flex-direction:column;align-items:center;gap:3px;letter-spacing:.3px}
+.nav-btn svg{width:17px;height:17px;stroke-width:2}
+.nav-btn.on{color:var(--acc);background:rgba(124,110,255,.1)}
+.nav-sep{height:1px;background:var(--bdr);margin:0 14px;flex-shrink:0}
+
+/* content */
+.content{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding:14px 16px}
+.content::-webkit-scrollbar{display:none}
+.tab-pane.hidden{display:none}
+
+/* ── CAMERA ── */
+.mode-toggle{display:flex;gap:5px;background:var(--bg);border-radius:20px;padding:3px;
+  margin-bottom:12px;border:1px solid var(--bdr2)}
+.mode-btn{flex:1;padding:7px;border:none;background:transparent;color:var(--mu2);
+  font-family:var(--F);font-size:12px;font-weight:700;border-radius:16px;cursor:pointer;
+  transition:all .2s;letter-spacing:.4px}
+.mode-btn.on{background:var(--surf2);color:var(--txt)}
+
+.cam-wrap{position:relative;background:#000;border-radius:var(--r2);overflow:hidden;
+  width:100%;aspect-ratio:4/3;border:1px solid var(--bdr2)}
+#video-el{width:100%;height:100%;object-fit:cover;display:block}
+.cam-hud{position:absolute;inset:0;pointer-events:none}
+/* corner brackets */
+.cam-hud::before,.cam-hud::after{content:'';position:absolute;border-color:rgba(124,110,255,.5);border-style:solid}
+.cam-hud::before{top:10px;left:10px;width:22px;height:22px;border-width:2px 0 0 2px;border-radius:4px 0 0 0}
+.cam-hud::after{bottom:10px;right:10px;width:22px;height:22px;border-width:0 2px 2px 0;border-radius:0 0 4px 0}
+.cam-badge{position:absolute;font-family:var(--M);font-size:10px;letter-spacing:1px;padding:3px 9px;border-radius:20px}
+.live-badge{top:12px;right:12px;background:rgba(0,0,0,.6);color:var(--ok);border:1px solid rgba(0,212,170,.3)}
+.rec-badge{top:12px;left:12px;background:rgba(255,77,109,.15);color:var(--err);
+  border:1px solid rgba(255,77,109,.4);display:none;align-items:center;gap:5px}
+.rdot{width:7px;height:7px;border-radius:50%;background:var(--err);animation:blink .8s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.rec-limit{bottom:12px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.7);color:var(--warn);display:none}
+
+.cam-controls{display:flex;align-items:center;gap:10px;margin-top:12px}
+.btn-capture{width:62px;height:62px;border-radius:50%;flex-shrink:0;
+  background:linear-gradient(135deg,var(--acc),var(--acc2));border:3px solid rgba(124,110,255,.35);
+  cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 20px rgba(124,110,255,.4)}
+.btn-capture:active{transform:scale(.9)}
+.btn-capture svg{width:22px;height:22px;color:#fff}
+.btn-capture.recording{background:linear-gradient(135deg,var(--err),#ff9a3c);
+  border-color:rgba(255,77,109,.4);box-shadow:0 4px 20px rgba(255,77,109,.5);animation:rpulse 1.5s infinite}
+@keyframes rpulse{0%,100%{box-shadow:0 4px 20px rgba(255,77,109,.5)}50%{box-shadow:0 4px 32px rgba(255,77,109,.85)}}
+
+/* queue */
+.sec-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
+.sec-ttl{font-family:var(--M);font-size:10px;color:var(--mu);letter-spacing:2px;text-transform:uppercase}
+.queue-list{display:flex;flex-direction:column;gap:7px}
+.qi{display:flex;align-items:center;gap:11px;padding:10px 13px;background:var(--surf);
+  border:1px solid var(--bdr);border-radius:12px;animation:sIn .2s ease}
+@keyframes sIn{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
+.qi-thumb{width:42px;height:42px;border-radius:8px;object-fit:cover;flex-shrink:0;background:var(--bg2)}
+.qi-vid{width:42px;height:42px;border-radius:8px;flex-shrink:0;background:var(--bg2);
+  display:flex;align-items:center;justify-content:center;font-size:18px}
+.qi-info{flex:1;min-width:0}
+.qi-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qi-meta{font-family:var(--M);font-size:10px;color:var(--mu)}
+.qi-badge{font-family:var(--M);font-size:9px;padding:3px 8px;border-radius:20px;font-weight:500;flex-shrink:0}
+.b-pending{background:rgba(255,179,71,.1);color:var(--warn);border:1px solid rgba(255,179,71,.25)}
+.b-uploading{background:rgba(124,110,255,.1);color:var(--acc);border:1px solid rgba(124,110,255,.2);animation:pulse .8s infinite}
+.b-done{background:rgba(0,212,170,.1);color:var(--ok);border:1px solid rgba(0,212,170,.2)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.prog-bar{height:3px;background:var(--bdr);border-radius:2px;overflow:hidden;margin-top:6px;display:none}
+.prog-bar.show{display:block}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--acc),var(--acc2));
+  border-radius:2px;transition:width .3s;width:0%}
+
+/* ── GALLERY ── */
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:14px;
+  -webkit-overflow-scrolling:touch}
+.chips::-webkit-scrollbar{display:none}
+.chip{padding:5px 13px;border-radius:20px;font-size:12px;font-weight:600;white-space:nowrap;
+  cursor:pointer;transition:all .2s;flex-shrink:0;border:1px solid var(--bdr2);
+  background:var(--surf);color:var(--mu2)}
+.chip.on{background:rgba(124,110,255,.18);color:var(--acc);border-color:rgba(124,110,255,.4)}
+.media-grid{columns:2;gap:8px}
+.mi{break-inside:avoid;margin-bottom:8px;border-radius:12px;overflow:hidden;cursor:pointer;
+  position:relative;transition:transform .2s;background:var(--surf)}
+.mi:active{transform:scale(.97)}
+.mi img,.mi video{width:100%;display:block}
+.mi .vplay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.28)}
+.play-ic{width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.9);
+  display:flex;align-items:center;justify-content:center}
+.play-ic svg{width:15px;height:15px;margin-left:2px;color:#000}
+.mi-cap{position:absolute;bottom:0;left:0;right:0;padding:6px 9px;
+  background:linear-gradient(to top,rgba(0,0,0,.85),transparent);opacity:0;transition:opacity .2s}
+.mi:hover .mi-cap{opacity:1}
+.mi-capname{font-size:10px;color:#fff;font-family:var(--M);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mi-tag{position:absolute;top:7px;right:7px;padding:2px 7px;border-radius:20px;
+  font-family:var(--M);font-size:9px;font-weight:500}
+.tag-p{background:rgba(124,110,255,.75);color:#fff}.tag-v{background:rgba(255,107,157,.75);color:#fff}
+.empty-st{text-align:center;padding:48px 20px;color:var(--mu)}
+.empty-st .ei{font-size:40px;margin-bottom:12px;opacity:.4}
+.empty-st p{font-family:var(--M);font-size:12px;line-height:1.7}
+
+/* ── FOLDERS ── */
+.nf-row{display:flex;gap:7px;margin-bottom:18px}
+.folder-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.fc{background:var(--surf);border:1px solid var(--bdr);border-radius:var(--r2);
+  padding:16px;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;gap:6px}
+.fc:hover{border-color:rgba(124,110,255,.4);background:var(--surf2)}
+.fc:active{transform:scale(.97)}
+.fc-icon{font-size:26px}.fc-name{font-size:14px;font-weight:700;word-break:break-all}
+.fc-meta{font-family:var(--M);font-size:10px;color:var(--mu)}
+.fc-actions{display:flex;gap:5px;margin-top:6px}
+.btn-share{flex:1;padding:6px;background:rgba(124,110,255,.08);border:1px solid rgba(124,110,255,.2);
+  border-radius:8px;color:var(--acc);font-size:11px;font-weight:600;cursor:pointer;
+  font-family:var(--F);transition:all .15s}
+.btn-share:hover{background:rgba(124,110,255,.18)}
+
+/* ── PROFILE ── */
+.phd{text-align:center;padding:20px 0 16px}
+.av-wrap{position:relative;width:72px;height:72px;margin:0 auto 10px}
+.av{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,var(--acc),var(--acc2));
+  display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:800;color:#fff}
+.av-badge{position:absolute;bottom:-3px;right:-3px;width:22px;height:22px;border-radius:50%;
+  background:var(--surf);border:2px solid var(--bg);display:flex;align-items:center;
+  justify-content:center;font-size:12px}
+.p-name{font-size:20px;font-weight:800;margin-bottom:3px}
+.p-email{font-family:var(--M);font-size:11px;color:var(--mu)}
+.p-st-lbl{font-family:var(--M);font-size:10px;margin-top:6px;padding:4px 12px;border-radius:20px;
+  display:inline-block;border:1px solid var(--bdr2);color:var(--mu2)}
+.stats-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:16px 0}
+.stat{background:var(--surf);border:1px solid var(--bdr);border-radius:var(--r);padding:12px 8px;text-align:center}
+.stat-v{font-size:22px;font-weight:800;background:linear-gradient(135deg,var(--acc),var(--acc2));
+  background-clip:text;-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.stat-l{font-family:var(--M);font-size:9px;color:var(--mu);text-transform:uppercase;letter-spacing:1px;margin-top:2px}
+.psec{font-family:var(--M);font-size:10px;color:var(--mu);text-transform:uppercase;letter-spacing:1.5px;margin:18px 0 9px}
+.cfg-card{background:var(--surf);border:1px solid var(--bdr);border-radius:var(--r2);padding:16px;margin-bottom:10px}
+
+/* storage switch in profile */
+.st-switch-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px}
+.ss-opt{padding:11px 6px;border:1px solid var(--bdr2);border-radius:10px;background:var(--bg2);cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:5px;transition:all .2s;
+  color:var(--mu2);font-size:11px;font-weight:600}
+.ss-opt .si{font-size:18px}
+.ss-opt:hover{border-color:var(--acc);color:var(--txt)}
+.ss-opt.on-supa{border-color:var(--acc);background:rgba(124,110,255,.12);color:var(--acc)}
+.ss-opt.on-gd{border-color:#34a853;background:rgba(52,168,83,.1);color:#34a853}
+.ss-opt.on-od{border-color:#0078d4;background:rgba(0,120,212,.1);color:#0078d4}
+
+/* ── MODALS ── */
+.mbg{position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:100;
+  display:flex;align-items:flex-end;justify-content:center;
+  backdrop-filter:blur(6px);transition:opacity .22s}
+.mbg.hidden{opacity:0;pointer-events:none}
+.modal{background:var(--surf);border:1px solid var(--bdr2);border-radius:22px 22px 0 0;
+  padding:22px 20px 40px;width:100%;max-width:500px;
+  transition:transform .28s;box-shadow:0 -20px 60px rgba(0,0,0,.6)}
+.mbg.hidden .modal{transform:translateY(100%)}
+.mhandle{width:36px;height:4px;background:var(--bdr2);border-radius:2px;margin:0 auto 18px}
+.mtitle{font-size:18px;font-weight:800;margin-bottom:16px}
+.mfield{margin-bottom:11px}
+.mactions{display:flex;gap:9px;margin-top:18px}
+.mbtn-ghost{flex:1;padding:12px;background:transparent;border:1px solid var(--bdr2);border-radius:10px;
+  color:var(--txt);font-family:var(--F);font-size:14px;font-weight:600;cursor:pointer;transition:all .15s}
+.mbtn-ghost:hover{border-color:var(--acc);color:var(--acc)}
+.mbtn-go{flex:2;padding:12px;background:linear-gradient(135deg,var(--acc),var(--acc2));color:#fff;
+  border:none;border-radius:10px;font-family:var(--F);font-size:14px;font-weight:700;cursor:pointer;transition:all .15s}
+.mbtn-go:hover{transform:translateY(-1px)}
+.prev-img{width:100%;border-radius:12px;margin-bottom:14px;max-height:220px;object-fit:cover}
+.prev-vid{width:100%;border-radius:12px;margin-bottom:14px;max-height:220px;background:#000}
+
+/* new-folder inline in save modal */
+.inline-add{display:flex;gap:6px;margin-top:6px}
+.inline-add .inp{font-size:13px;padding:9px 12px}
+.inline-add button{padding:9px 13px;flex-shrink:0}
+
+/* ── LIGHTBOX ── */
+.lb{position:fixed;inset:0;background:rgba(0,0,0,.97);z-index:200;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .2s}
+.lb.hidden{opacity:0;pointer-events:none}
+#lb-img{max-width:100%;max-height:70vh;object-fit:contain;border-radius:10px}
+#lb-vid{max-width:100%;max-height:70vh;border-radius:10px;background:#000}
+.lb-top{position:fixed;top:0;left:0;right:0;padding:14px 18px;display:flex;
+  align-items:center;justify-content:space-between;
+  background:linear-gradient(to bottom,rgba(0,0,0,.9),transparent)}
+.lb-info .lb-name{font-size:13px;font-weight:600}
+.lb-info .lb-meta{font-family:var(--M);font-size:10px;color:var(--mu2);margin-top:2px}
+.lb-btns{position:fixed;bottom:0;left:0;right:0;padding:16px 18px;display:flex;gap:8px;
+  background:linear-gradient(to top,rgba(0,0,0,.9),transparent)}
+.lb-btn{flex:1;padding:10px;border-radius:9px;font-family:var(--F);font-size:12px;font-weight:600;
+  cursor:pointer;text-align:center;text-decoration:none;display:flex;align-items:center;
+  justify-content:center;transition:all .15s}
+.lb-ghost{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:var(--txt)}
+.lb-acc{background:linear-gradient(135deg,var(--acc),var(--acc2));color:#fff;border:none}
+
+/* ── TOAST ── */
+.toasts{position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:400;
+  display:flex;flex-direction:column;gap:7px;pointer-events:none;width:90%;max-width:340px}
+.toast{background:var(--surf2);border:1px solid var(--bdr2);padding:9px 16px;border-radius:100px;
+  font-size:12px;font-weight:600;font-family:var(--M);animation:tIn .22s ease;
+  display:flex;align-items:center;gap:8px;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+@keyframes tIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+.t-ok{border-color:rgba(0,212,170,.3);color:var(--ok)}
+.t-err{border-color:rgba(255,77,109,.3);color:var(--err)}
+.t-info{border-color:rgba(124,110,255,.3);color:var(--acc)}
+
+/* connect btns */
+.conn-btn{width:100%;padding:12px;border:none;border-radius:10px;font-family:var(--F);
+  font-size:14px;font-weight:700;cursor:pointer;transition:all .15s;margin-bottom:6px;
+  display:flex;align-items:center;justify-content:center;gap:8px}
+.gb{background:#34a853;color:#fff}.gb:hover{background:#2d9147}
+.ob{background:#0078d4;color:#fff}.ob:hover{background:#006bbf}
+
+/* loading spinner */
+.spin{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.3);
+  border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="toasts" id="toasts"></div>
+
+<!-- ═══════════════════════════════════
+     LOADING SCREEN
+═══════════════════════════════════ -->
+<div class="screen" id="loading-screen">
+  <div class="fcenter" style="gap:16px">
+    <div class="logo">SnapVault</div>
+    <div class="spin"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     AUTH SCREEN (login/signup)
+     Keys are fetched from /api/config — never in HTML
+═══════════════════════════════════ -->
+<div class="screen hidden" id="auth-screen">
+  <div class="fcenter">
+    <div class="logo">SnapVault</div>
+    <div class="logo-sub">Capture → Name → Cloud</div>
+    <div class="card">
+      <div class="tab-row">
+        <button class="tab-btn on" id="tab-l" onclick="setMode('login')">Login</button>
+        <button class="tab-btn" id="tab-s" onclick="setMode('signup')">Sign Up</button>
+      </div>
+      <div class="mfield">
+        <div class="lbl">Email</div>
+        <input type="email" class="inp" id="a-email" placeholder="you@example.com" autocomplete="email"/>
+      </div>
+      <div class="mfield">
+        <div class="lbl">Password</div>
+        <input type="password" class="inp" id="a-pass" placeholder="••••••••" autocomplete="current-password"/>
+      </div>
+      <button class="btn btn-g" id="a-btn" onclick="doAuth()">Login</button>
+      <div class="fmsg" id="a-msg"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     STORAGE PICKER (shown after login,
+     until a storage is chosen)
+═══════════════════════════════════ -->
+<div class="screen hidden" id="storage-screen">
+  <div class="fcenter">
+    <div class="logo">SnapVault</div>
+    <div class="logo-sub">Where should we save your files?</div>
+    <div class="card" style="gap:16px">
+      <div>
+        <div class="lbl" style="margin-bottom:10px">Choose your cloud storage</div>
+        <div class="st-grid">
+          <div class="st-opt" id="so-supa" onclick="pickStorage('supabase')">
+            <span class="ico">🗄️</span>Supabase
+          </div>
+          <div class="st-opt" id="so-gd" onclick="pickStorage('gdrive')">
+            <span class="ico">📗</span>Google Drive
+          </div>
+          <div class="st-opt" id="so-od" onclick="pickStorage('onedrive')">
+            <span class="ico">🔷</span>OneDrive
+          </div>
+        </div>
+      </div>
+
+      <!-- Supabase: no keys — configured via Vercel env -->
+      <div id="sp-supa" style="display:none">
+        <div class="info-box">
+          <strong>Supabase</strong> is already configured via your Vercel environment variables.<br/>
+          No keys needed here — they're kept safe on the server.
+        </div>
+        <button class="btn btn-g" style="margin-top:10px" onclick="confirmStorage('supabase')">Use Supabase →</button>
+      </div>
+
+      <!-- Google Drive -->
+      <div id="sp-gd" style="display:none">
+        <div class="info-box">
+          <strong>Google Drive (15 GB free)</strong><br/>
+          Files go into a <strong>SnapVault/</strong> folder in your Drive.<br/>
+          Sign in with your Google account below.
+        </div>
+        <button class="conn-btn gb" style="margin-top:10px" onclick="signInGoogle()">
+          <span style="font-size:17px;font-weight:900">G</span> Sign in with Google
+        </button>
+      </div>
+
+      <!-- OneDrive -->
+      <div id="sp-od" style="display:none">
+        <div class="info-box">
+          <strong>OneDrive (5 GB free)</strong><br/>
+          Files go into a <strong>SnapVault/</strong> folder in your OneDrive.<br/>
+          Sign in with your Microsoft account below.
+        </div>
+        <button class="conn-btn ob" style="margin-top:10px" onclick="signInMicrosoft()">
+          <span style="font-size:17px">⊞</span> Sign in with Microsoft
+        </button>
+      </div>
+
+      <div class="fmsg" id="sp-msg"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     MAIN APP
+═══════════════════════════════════ -->
+<div class="screen hidden" id="app-screen">
+
+  <div class="topbar">
+    <div style="display:flex;align-items:center;gap:8px">
+      <div class="topbar-logo">SnapVault</div>
+      <div class="demo-chip" id="demo-chip" style="display:none">DEMO MODE</div>
+    </div>
+    <div class="topbar-right">
+      <div class="online-pill"><div class="odot" id="odot"></div><span id="olbl" style="font-size:10px">Online</span></div>
+      <div class="icon-btn" onclick="openShareModal()" title="Share folder">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav">
+    <button class="nav-btn on" id="nav-cam" onclick="showTab('cam')">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      Capture
+    </button>
+    <button class="nav-btn" id="nav-gallery" onclick="showTab('gallery')">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+      Gallery
+    </button>
+    <button class="nav-btn" id="nav-folders" onclick="showTab('folders')">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      Folders
+    </button>
+    <button class="nav-btn" id="nav-profile" onclick="showTab('profile')">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      Profile
+    </button>
+  </div>
+  <div class="nav-sep"></div>
+
+  <!-- CAPTURE TAB -->
+  <div class="content tab-pane" id="tab-cam">
+    <div class="mode-toggle">
+      <button class="mode-btn on" id="mb-photo" onclick="setCapMode('photo')">📷 PHOTO</button>
+      <button class="mode-btn" id="mb-video" onclick="setCapMode('video')">🎬 VIDEO</button>
+    </div>
+    <div class="cam-wrap" id="cam-wrap">
+      <video id="video-el" autoplay playsinline muted></video>
+      <canvas id="canvas-el" style="display:none"></canvas>
+      <div class="cam-hud"></div>
+      <div class="cam-badge live-badge" id="live-badge">● LIVE</div>
+      <div class="cam-badge rec-badge" id="rec-badge"><div class="rdot"></div><span id="rec-t">00:00</span></div>
+      <div class="cam-badge rec-limit" id="rec-limit">5:00 MAX</div>
+    </div>
+    <div class="cam-controls">
+      <button class="btn-sm" onclick="flipCam()">↺ Flip</button>
+      <button class="btn-capture" id="btn-cap" onclick="handleCapture()">
+        <svg id="cap-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
+      </button>
+      <button class="btn-sm" onclick="openFolderModal()">+ Folder</button>
+    </div>
+
+    <div style="margin-top:20px">
+      <div class="sec-hd">
+        <div class="sec-ttl">Upload Queue</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn-sm" onclick="processQueue()" style="font-size:11px;padding:6px 10px">↑ Sync</button>
+          <button class="btn-sm" onclick="clearDone()" style="font-size:11px;padding:6px 10px">✓ Clear</button>
+        </div>
+      </div>
+      <div class="prog-bar" id="prog-bar"><div class="prog-fill" id="prog-fill"></div></div>
+      <div class="queue-list" id="queue-list">
+        <div style="font-family:var(--M);font-size:11px;color:var(--mu);text-align:center;padding:14px">All clear ✓</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GALLERY TAB -->
+  <div class="content tab-pane hidden" id="tab-gallery">
+    <div class="chips" id="chips"></div>
+    <div id="gal-grid"><div class="empty-st"><div class="ei">🖼️</div><p>No media yet.<br/>Go capture something!</p></div></div>
+  </div>
+
+  <!-- FOLDERS TAB -->
+  <div class="content tab-pane hidden" id="tab-folders">
+    <div class="nf-row">
+      <input type="text" class="inp" id="nf-inp" placeholder="New folder name..." style="font-size:13px;padding:10px 13px"/>
+      <button class="btn-sm" onclick="createFolder()" style="padding:10px 15px;font-size:13px">Create</button>
+    </div>
+    <div class="folder-grid" id="folder-grid"></div>
+  </div>
+
+  <!-- PROFILE TAB -->
+  <div class="content tab-pane hidden" id="tab-profile">
+    <div class="phd">
+      <div class="av-wrap">
+        <div class="av" id="p-av">?</div>
+        <div class="av-badge" id="p-av-badge">☁️</div>
+      </div>
+      <div class="p-name" id="p-name">User</div>
+      <div class="p-email" id="p-email"></div>
+      <div class="p-st-lbl" id="p-st-lbl">Supabase</div>
+    </div>
+    <div class="stats-row">
+      <div class="stat"><div class="stat-v" id="s-ph">0</div><div class="stat-l">Photos</div></div>
+      <div class="stat"><div class="stat-v" id="s-vi">0</div><div class="stat-l">Videos</div></div>
+      <div class="stat"><div class="stat-v" id="s-q">0</div><div class="stat-l">Queued</div></div>
+    </div>
+
+    <div class="psec">Change Storage</div>
+    <div class="cfg-card">
+      <div style="font-family:var(--M);font-size:10px;color:var(--mu);margin-bottom:10px">
+        Current: <span id="cur-st-lbl" style="color:var(--txt)">Supabase</span>
+      </div>
+      <div class="st-switch-grid">
+        <div class="ss-opt" id="ss-supa" onclick="changeStorage('supabase')"><span class="si">🗄️</span>Supabase</div>
+        <div class="ss-opt" id="ss-gd" onclick="changeStorage('gdrive')"><span class="si">📗</span>Google Drive</div>
+        <div class="ss-opt" id="ss-od" onclick="changeStorage('onedrive')"><span class="si">🔷</span>OneDrive</div>
+      </div>
+    </div>
+
+    <button class="btn btn-danger" onclick="doSignOut()" style="margin-top:4px">Sign Out</button>
+    <div style="height:24px"></div>
+  </div>
+</div>
+
+<!-- ═══════ MODALS ═══════ -->
+
+<!-- SAVE MEDIA MODAL — always shown after capture -->
+<div class="mbg hidden" id="save-modal">
+  <div class="modal">
+    <div class="mhandle"></div>
+    <div class="mtitle" id="sm-title">Save Photo</div>
+    <img id="sm-img" class="prev-img" src="" alt="" style="display:none"/>
+    <video id="sm-vid" class="prev-vid" controls style="display:none"></video>
+
+    <!-- File name -->
+    <div class="mfield">
+      <div class="lbl">File Name</div>
+      <input type="text" class="inp" id="sm-name" placeholder="e.g. site_visit_day1"/>
+    </div>
+
+    <!-- Folder -->
+    <div class="mfield">
+      <div class="lbl">Save to Folder</div>
+      <select class="inp" id="sm-folder"></select>
+    </div>
+
+    <!-- Inline new folder -->
+    <div class="inline-add">
+      <input type="text" class="inp" id="sm-newfolder" placeholder="Or type new folder name..."/>
+      <button class="btn-sm" onclick="addFolderFromModal()">+ Add</button>
+    </div>
+
+    <div class="mactions">
+      <button class="mbtn-ghost" onclick="discardMedia()">Discard</button>
+      <button class="mbtn-go" onclick="queueMedia()">Save & Upload</button>
+    </div>
+  </div>
+</div>
+
+<!-- NEW FOLDER MODAL -->
+<div class="mbg hidden" id="folder-modal">
+  <div class="modal">
+    <div class="mhandle"></div>
+    <div class="mtitle">New Folder</div>
+    <div class="mfield">
+      <div class="lbl">Folder Name</div>
+      <input type="text" class="inp" id="fm-inp" placeholder="e.g. FPT Internship, Goa Trip"/>
+    </div>
+    <div class="mactions">
+      <button class="mbtn-ghost" onclick="closeModal('folder-modal')">Cancel</button>
+      <button class="mbtn-go" onclick="createFolderModal()">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- SHARE MODAL -->
+<div class="mbg hidden" id="share-modal">
+  <div class="modal">
+    <div class="mhandle"></div>
+    <div class="mtitle">Share Folder</div>
+    <div class="mfield">
+      <div class="lbl">Folder</div>
+      <select class="inp" id="share-sel" onchange="genShareLink()"></select>
+    </div>
+    <div class="mfield" style="margin-top:10px">
+      <div class="lbl">Share Link</div>
+      <div style="display:flex;gap:7px;margin-top:5px">
+        <input type="text" class="inp" id="share-link" readonly style="font-size:11px;flex:1" placeholder="Select folder first"/>
+        <button class="btn-sm" onclick="copyShare()">Copy</button>
+      </div>
+    </div>
+    <div style="font-family:var(--M);font-size:10px;color:var(--mu);margin-top:6px">
+      Anyone with this link can view photos in this folder.
+    </div>
+    <div class="mactions"><button class="mbtn-ghost" onclick="closeModal('share-modal')" style="flex:1">Close</button></div>
+  </div>
+</div>
+
+<!-- LIGHTBOX -->
+<div class="lb hidden" id="lb">
+  <div class="lb-top">
+    <div class="lb-info">
+      <div class="lb-name" id="lb-name"></div>
+      <div class="lb-meta" id="lb-meta"></div>
+    </div>
+    <div class="icon-btn" onclick="closeLB()" style="background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.12)">✕</div>
+  </div>
+  <img id="lb-img" src="" alt="" style="display:none"/>
+  <video id="lb-vid" controls style="display:none"></video>
+  <div class="lb-btns">
+    <button class="lb-btn lb-ghost" onclick="copyMediaLink()">🔗 Copy Link</button>
+    <a id="lb-dl" class="lb-btn lb-acc" download>⬇ Download</a>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════
+// STATE
+// ══════════════════════════════════════
+let SB = null, currentUser = null;
+let appConfig = {}; // loaded from /api/config
+let folders = ['unsorted'], allMedia = [], queue = [];
+let demoMedia = [];
+let stream = null, facing = 'environment';
+let mediaRec = null, recInv = null, recSec = 0;
+let capturedBlob = null, capturedUrl = null, capturedType = 'photo';
+let capMode = 'photo';
+let lbIndex = 0, galFilter = 'all';
+let gdriveToken = null, msToken = null;
+const DEMO_BUILD_ENABLED = false;
+const DEMO_MODE = (() => {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('demo') === '1') return true;
+  return DEMO_BUILD_ENABLED;
+})();
+
+const ST = {
+  get storage(){ return localStorage.getItem('sv_st')||null },
+  set storage(v){ localStorage.setItem('sv_st',v) },
+};
+
+// ══════════════════════════════════════
+// BOOT — fetch config from Vercel API
+// ══════════════════════════════════════
+window.addEventListener('DOMContentLoaded', async () => {
+  // Handle OAuth redirect tokens FIRST
+  handleOAuthTokens();
+
+  // Temporary local demo mode: bypass auth/setup
+  if (DEMO_MODE) {
+    currentUser = { email: 'demo@snapvault.local', id: 'demo-user' };
+    ST.storage = 'demo';
+    enterApp();
+    return;
+  }
+
+  // Fetch secure config from server
+  try {
+    const res = await fetch('/api/config');
+    appConfig = await res.json();
+  } catch(e) {
+    // Dev fallback: if no /api/config (opening file locally), show message
+    showScreen('auth-screen');
+    msg('a-msg', 'Deploy to Vercel so /api/config can securely provide credentials.', 'e');
+    return;
+  }
+
+  // Init Supabase with server-provided keys
+  if (appConfig.supabaseUrl && appConfig.supabaseKey) {
+    SB = window.supabase.createClient(appConfig.supabaseUrl, appConfig.supabaseKey);
+  }
+
+  // Check if already logged in
+  if (SB) {
+    const { data: { session } } = await SB.auth.getSession();
+    if (session) {
+      currentUser = session.user;
+      afterLogin();
+      return;
+    }
+  }
+
+  // Restore OAuth tokens (Google/MS redirect came back)
+  if (gdriveToken || msToken) {
+    if (gdriveToken) currentUser = { email: 'gdrive-user', id: 'gdrive' };
+    if (msToken)     currentUser = { email: 'onedrive-user', id: 'onedrive' };
+    afterLogin();
+    return;
+  }
+
+  showScreen('auth-screen');
+});
+
+// ══════════════════════════════════════
+// AUTH
+// ══════════════════════════════════════
+let authMode = 'login';
+function setMode(m) {
+  authMode = m;
+  document.getElementById('tab-l').classList.toggle('on', m==='login');
+  document.getElementById('tab-s').classList.toggle('on', m==='signup');
+  document.getElementById('a-btn').textContent = m==='login' ? 'Login' : 'Create Account';
+}
+
+async function doAuth() {
+  if (!SB) { msg('a-msg','Supabase not configured yet. Add Vercel env vars and redeploy.','e'); return; }
+  const email = document.getElementById('a-email').value.trim();
+  const pass  = document.getElementById('a-pass').value;
+  if (!email||!pass) { msg('a-msg','Fill all fields','e'); return; }
+  const btn = document.getElementById('a-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span>';
+  try {
+    let res;
+    if (authMode==='login') res = await SB.auth.signInWithPassword({email,password:pass});
+    else                    res = await SB.auth.signUp({email,password:pass});
+    if (res.error) { msg('a-msg', res.error.message, 'e'); }
+    else if (authMode==='signup') { msg('a-msg','Account created! Login now.','s'); setMode('login'); }
+    else { currentUser = res.data.user||res.data.session?.user; afterLogin(); }
+  } catch(e) { msg('a-msg', e.message, 'e'); }
+  btn.disabled = false; btn.textContent = authMode==='login'?'Login':'Create Account';
+}
+
+// ══════════════════════════════════════
+// AFTER LOGIN → show storage picker
+// if no storage chosen yet
+// ══════════════════════════════════════
+function afterLogin() {
+  if (!ST.storage) {
+    showScreen('storage-screen');
+  } else {
+    enterApp();
+  }
+}
+
+// ══════════════════════════════════════
+// STORAGE PICKER
+// ══════════════════════════════════════
+function pickStorage(s) {
+  // Reset highlights
+  ['so-supa','so-gd','so-od'].forEach(id => {
+    document.getElementById(id).className = 'st-opt';
+  });
+  const clsMap = { supabase:'sel-supa', gdrive:'sel-gd', onedrive:'sel-od' };
+  document.getElementById({supabase:'so-supa',gdrive:'so-gd',onedrive:'so-od'}[s]).classList.add(clsMap[s]);
+
+  document.getElementById('sp-supa').style.display = s==='supabase' ? '' : 'none';
+  document.getElementById('sp-gd').style.display   = s==='gdrive'   ? '' : 'none';
+  document.getElementById('sp-od').style.display   = s==='onedrive' ? '' : 'none';
+}
+
+function confirmStorage(s) {
+  if (DEMO_MODE) {
+    toast('Storage locked in demo mode', 'info');
+    return;
+  }
+  ST.storage = s;
+  enterApp();
+}
+
+// Change storage from Profile tab — re-opens picker
+function changeStorage(s) {
+  if (DEMO_MODE) {
+    toast('Storage switching disabled in demo mode', 'info');
+    return;
+  }
+  ST.storage = null;
+  showScreen('storage-screen');
+  pickStorage(s);
+}
+
+// ══════════════════════════════════════
+// OAUTH — Google Drive / OneDrive
+// ══════════════════════════════════════
+function handleOAuthTokens() {
+  const hash = window.location.hash;
+  if (!hash) return;
+  const p = new URLSearchParams(hash.replace('#',''));
+  const token = p.get('access_token');
+  if (!token) return;
+  // Detect which service based on URL or stored intent
+  const intent = localStorage.getItem('sv_oauth_intent');
+  if (intent === 'gdrive') {
+    gdriveToken = token;
+    localStorage.setItem('sv_gd_token', token);
+    ST.storage = 'gdrive';
+  } else if (intent === 'onedrive') {
+    msToken = token;
+    localStorage.setItem('sv_ms_token', token);
+    ST.storage = 'onedrive';
+  }
+  localStorage.removeItem('sv_oauth_intent');
+  window.history.replaceState(null, '', window.location.pathname);
+}
+
+function restoreOAuthTokens() {
+  gdriveToken = localStorage.getItem('sv_gd_token') || null;
+  msToken     = localStorage.getItem('sv_ms_token') || null;
+}
+
+function signInGoogle() {
+  const id = appConfig.gdriveClientId;
+  if (!id) { msg('sp-msg','Google Client ID not set in Vercel env (GDRIVE_CLIENT_ID)','e'); return; }
+  localStorage.setItem('sv_oauth_intent','gdrive');
+  const redirect = encodeURIComponent(window.location.origin + window.location.pathname);
+  const scope    = encodeURIComponent('https://www.googleapis.com/auth/drive.file');
+  window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${id}&redirect_uri=${redirect}&response_type=token&scope=${scope}`;
+}
+
+function signInMicrosoft() {
+  const id = appConfig.onedriveClientId;
+  if (!id) { msg('sp-msg','OneDrive Client ID not set in Vercel env (ONEDRIVE_CLIENT_ID)','e'); return; }
+  localStorage.setItem('sv_oauth_intent','onedrive');
+  const redirect = encodeURIComponent(window.location.origin + window.location.pathname);
+  const scope    = encodeURIComponent('Files.ReadWrite offline_access');
+  window.location.href = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${id}&response_type=token&redirect_uri=${redirect}&scope=${scope}`;
+}
+
+async function doSignOut() {
+  if (DEMO_MODE) {
+    toast('Sign out disabled in demo mode', 'info');
+    return;
+  }
+  if (SB) await SB.auth.signOut();
+  localStorage.removeItem('sv_gd_token');
+  localStorage.removeItem('sv_ms_token');
+  localStorage.removeItem('sv_st');
+  gdriveToken = msToken = currentUser = null;
+  ST.storage = null;
+  showScreen('auth-screen');
+  toast('Signed out','info');
+}
+
+// ══════════════════════════════════════
+// ENTER APP
+// ══════════════════════════════════════
+function enterApp() {
+  restoreOAuthTokens();
+  if (DEMO_MODE) loadDemoMedia();
+  if (!currentUser && gdriveToken) currentUser = {email:'gdrive-user',id:'gdrive'};
+  if (!currentUser && msToken)     currentUser = {email:'onedrive-user',id:'onedrive'};
+  showScreen('app-screen');
+  document.getElementById('demo-chip').style.display = DEMO_MODE ? '' : 'none';
+  startCam();
+  loadQueue();
+  loadFolders();
+  loadGallery();
+  updateProfile();
+  watchOnline();
+  renderQueue();
+}
+
+// ══════════════════════════════════════
+// ONLINE WATCHER
+// ══════════════════════════════════════
+function watchOnline() {
+  const upd = () => {
+    const on = navigator.onLine;
+    document.getElementById('odot').classList.toggle('off', !on);
+    document.getElementById('olbl').textContent = on ? 'Online' : 'Offline';
+    if (on) processQueue();
+  };
+  window.addEventListener('online', upd);
+  window.addEventListener('offline', upd);
+  upd();
+}
+
+// ══════════════════════════════════════
+// CAMERA
+// ══════════════════════════════════════
+async function startCam() {
+  try {
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: facing, width:{ideal:1280}, height:{ideal:960} },
+      audio: true
+    });
+    document.getElementById('video-el').srcObject = stream;
+    document.getElementById('live-badge').textContent = '● LIVE';
+  } catch(e) {
+    document.getElementById('live-badge').textContent = '● NO CAM';
+    document.getElementById('cam-wrap').innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+        height:100%;gap:12px;color:var(--mu);font-family:var(--M);font-size:12px;padding:20px;text-align:center">
+        <div style="font-size:32px">📷</div><div>Camera blocked. Use file upload:</div>
+        <label style="cursor:pointer;padding:10px 20px;background:linear-gradient(135deg,var(--acc),var(--acc2));
+          color:#fff;border-radius:10px;font-weight:700;font-family:var(--F)">
+          Choose File
+          <input type="file" accept="image/*,video/*" capture="environment" style="display:none"
+            onchange="handleFileInput(event)"/>
+        </label>
+      </div>`;
+  }
+}
+
+function flipCam() { facing = facing==='environment'?'user':'environment'; startCam(); }
+
+function setCapMode(m) {
+  capMode = m;
+  document.getElementById('mb-photo').classList.toggle('on', m==='photo');
+  document.getElementById('mb-video').classList.toggle('on', m==='video');
+  const ico = document.getElementById('cap-ico');
+  document.getElementById('rec-limit').style.display = m==='video' ? 'block' : 'none';
+  if (m==='video') ico.innerHTML='<rect x="4" y="4" width="16" height="16" rx="3"/>';
+  else             ico.innerHTML='<circle cx="12" cy="12" r="8"/>';
+  if (mediaRec && mediaRec.state==='recording') stopRec();
+}
+
+function handleCapture() {
+  if (capMode==='photo') takePhoto();
+  else if (!mediaRec || mediaRec.state!=='recording') startRec();
+  else stopRec();
+}
+
+function takePhoto() {
+  const v = document.getElementById('video-el');
+  if (!v.srcObject) return;
+  const c = document.getElementById('canvas-el');
+  c.width = v.videoWidth||1280; c.height = v.videoHeight||960;
+  c.getContext('2d').drawImage(v, 0, 0);
+  capturedUrl = c.toDataURL('image/jpeg', 0.92);
+  c.toBlob(b => { capturedBlob = b; capturedType = 'photo'; openSaveModal(); }, 'image/jpeg', 0.92);
+  // shutter flash
+  const btn = document.getElementById('btn-cap');
+  btn.style.background = '#fff'; setTimeout(() => btn.style.background = '', 120);
+}
+
+function startRec() {
+  if (!stream) return;
+  const chunks = [];
+  try { mediaRec = new MediaRecorder(stream, {mimeType:'video/webm;codecs=vp9,opus'}); }
+  catch(e) { mediaRec = new MediaRecorder(stream); }
+  mediaRec.ondataavailable = e => { if (e.data.size>0) chunks.push(e.data); };
+  mediaRec.onstop = () => {
+    const blob = new Blob(chunks, {type:'video/webm'});
+    capturedBlob = blob; capturedUrl = URL.createObjectURL(blob); capturedType = 'video';
+    openSaveModal();
+  };
+  mediaRec.start(100); recSec = 0;
+  document.getElementById('rec-badge').style.display = 'flex';
+  document.getElementById('btn-cap').classList.add('recording');
+  document.getElementById('cap-ico').innerHTML = '<rect x="6" y="6" width="12" height="12" rx="2"/>';
+  recInv = setInterval(() => {
+    recSec++;
+    const m = String(Math.floor(recSec/60)).padStart(2,'0');
+    const s = String(recSec%60).padStart(2,'0');
+    document.getElementById('rec-t').textContent = `${m}:${s}`;
+    if (recSec >= 300) stopRec();
+  }, 1000);
+}
+
+function stopRec() {
+  if (!mediaRec) return;
+  mediaRec.stop(); clearInterval(recInv); recSec = 0;
+  document.getElementById('rec-badge').style.display = 'none';
+  document.getElementById('btn-cap').classList.remove('recording');
+  document.getElementById('cap-ico').innerHTML = '<rect x="4" y="4" width="16" height="16" rx="3"/>';
+}
+
+function handleFileInput(e) {
+  const f = e.target.files[0]; if (!f) return;
+  capturedType = f.type.startsWith('video') ? 'video' : 'photo';
+  capturedBlob = f; capturedUrl = URL.createObjectURL(f);
+  openSaveModal();
+}
+
+// ══════════════════════════════════════
+// SAVE MODAL — always shown after capture
+// asks: filename + folder (+ create new folder inline)
+// ══════════════════════════════════════
+function openSaveModal() {
+  const isVid = capturedType === 'video';
+  document.getElementById('sm-title').textContent = isVid ? 'Save Video' : 'Save Photo';
+  document.getElementById('sm-img').style.display = isVid ? 'none' : 'block';
+  document.getElementById('sm-vid').style.display = isVid ? 'block' : 'none';
+  if (isVid) document.getElementById('sm-vid').src = capturedUrl;
+  else       document.getElementById('sm-img').src = capturedUrl;
+
+  const ts  = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+  document.getElementById('sm-name').value = isVid ? `video_${ts}` : `photo_${ts}`;
+  document.getElementById('sm-newfolder').value = '';
+
+  populateFolderSelect('sm-folder');
+  document.getElementById('save-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('sm-name').select(), 100);
+}
+
+function populateFolderSelect(id) {
+  const sel = document.getElementById(id);
+  const cur = sel.value;
+  sel.innerHTML = folders.map(f => `<option value="${f}">📂 ${f}</option>`).join('');
+  if (cur && folders.includes(cur)) sel.value = cur;
+}
+
+function addFolderFromModal() {
+  const inp = document.getElementById('sm-newfolder');
+  const name = sanitizeName(inp.value);
+  if (!name) return;
+  if (!folders.includes(name)) folders.push(name);
+  populateFolderSelect('sm-folder');
+  document.getElementById('sm-folder').value = name;
+  inp.value = '';
+  toast('Folder added: ' + name, 'ok');
+}
+
+function discardMedia() { capturedBlob = null; capturedUrl = null; closeModal('save-modal'); }
+
+function queueMedia() {
+  const rawName = document.getElementById('sm-name').value.trim();
+  const ext     = capturedType === 'video' ? '.webm' : '.jpg';
+  const name    = (rawName || 'file') + (rawName.endsWith(ext) ? '' : ext);
+  const folder  = document.getElementById('sm-folder').value || 'unsorted';
+  if (!capturedBlob) return;
+  if (capturedBlob.size > 100 * 1024 * 1024) { toast('File too large (max 100MB)', 'err'); return; }
+
+  const item = {
+    id: Date.now(), name, folder, type: capturedType,
+    dataUrl: capturedType==='photo' ? capturedUrl : null,
+    vidUrl:  capturedType==='video' ? capturedUrl : null,
+    status: 'pending'
+  };
+  queue.unshift(item);
+  saveQMeta(); renderQueue(); updateStats();
+  closeModal('save-modal');
+  toast(`${capturedType==='video'?'🎬':'📷'} Queued: ${name}`, 'ok');
+  if (navigator.onLine) processQueue();
+  capturedBlob = null; capturedUrl = null;
+}
+
+// ══════════════════════════════════════
+// QUEUE
+// ══════════════════════════════════════
+function loadQueue() {
+  try { queue = JSON.parse(localStorage.getItem('sv_q') || '[]'); } catch(e) { queue = []; }
+}
+function saveQMeta() {
+  try { localStorage.setItem('sv_q', JSON.stringify(queue.map(q => ({...q, blob:null})))); } catch(e) {}
+}
+function renderQueue() {
+  const el = document.getElementById('queue-list');
+  const show = queue.filter(q => q.status !== 'done' || (q.doneAt && Date.now()-q.doneAt < 4000));
+  if (!show.length) { el.innerHTML = '<div style="font-family:var(--M);font-size:11px;color:var(--mu);text-align:center;padding:14px">All clear ✓</div>'; return; }
+  el.innerHTML = show.map(it => `
+    <div class="qi" id="qi-${it.id}">
+      ${it.type==='video'
+        ? `<div class="qi-vid">🎬</div>`
+        : `<img src="${it.dataUrl||''}" class="qi-thumb" onerror="this.style.opacity='.2'"/>`}
+      <div class="qi-info">
+        <div class="qi-name">${it.name}</div>
+        <div class="qi-meta">📂 ${it.folder} · ${it.type}</div>
+      </div>
+      <div class="qi-badge b-${it.status}">${it.status}</div>
+    </div>`).join('');
+}
+function clearDone() { queue = queue.filter(q => q.status!=='done'); saveQMeta(); renderQueue(); updateStats(); }
+
+async function processQueue() {
+  if (!navigator.onLine || !currentUser) return;
+  const pending = queue.filter(q => q.status==='pending');
+  if (!pending.length) return;
+  const bar = document.getElementById('prog-bar');
+  const fill = document.getElementById('prog-fill');
+  bar.classList.add('show'); let done = 0;
+  for (const item of pending) {
+    item.status = 'uploading'; renderQueue();
+    try {
+      let blob;
+      if (item.dataUrl) { const r = await fetch(item.dataUrl); blob = await r.blob(); }
+      else if (item.vidUrl) { const r = await fetch(item.vidUrl); blob = await r.blob(); }
+      else { item.status='pending'; continue; }
+      await uploadBlob(blob, item.folder, item.name, item.type);
+      item.status = 'done'; item.doneAt = Date.now();
+      done++; fill.style.width = `${(done/pending.length)*100}%`;
+      saveQMeta(); renderQueue();
+      toast(`Uploaded: ${item.name}`, 'ok');
+    } catch(e) {
+      item.status = 'pending'; renderQueue();
+      toast('Upload failed: ' + e.message, 'err');
+    }
+  }
+  setTimeout(() => { bar.classList.remove('show'); fill.style.width='0%'; }, 1200);
+  loadGallery();
+}
+
+// ══════════════════════════════════════
+// UPLOAD TO STORAGE
+// ══════════════════════════════════════
+async function uploadBlob(blob, folder, name, type) {
+  const st = ST.storage;
+  if (st === 'demo') {
+    await uploadDemo(blob, folder, name, type);
+  } else if (st === 'supabase') {
+    if (!SB||!currentUser) throw new Error('Supabase not ready');
+    const path = `${currentUser.id}/${folder}/${name}`;
+    const mime = type==='video' ? 'video/webm' : 'image/jpeg';
+    const {error} = await SB.storage.from('snapvault').upload(path, blob, {contentType:mime, upsert:true});
+    if (error) throw error;
+  } else if (st === 'gdrive') {
+    await uploadGDrive(blob, name, folder, type);
+  } else if (st === 'onedrive') {
+    await uploadOneDrive(blob, name, folder, type);
+  }
+}
+
+async function uploadDemo(blob, folder, name, type) {
+  const url = type === 'photo' ? await blobToDataUrl(blob) : URL.createObjectURL(blob);
+  demoMedia.unshift({
+    name,
+    folder,
+    url,
+    type,
+    path: `demo/${folder}/${name}`
+  });
+  if (!folders.includes(folder)) folders.push(folder);
+  saveDemoMedia();
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+function loadDemoMedia() {
+  try {
+    demoMedia = JSON.parse(localStorage.getItem('sv_demo_media') || '[]');
+  } catch (e) {
+    demoMedia = [];
+  }
+}
+
+function saveDemoMedia() {
+  try {
+    localStorage.setItem('sv_demo_media', JSON.stringify(demoMedia));
+  } catch (e) {}
+}
+
+async function uploadGDrive(blob, name, folder, type) {
+  const token = gdriveToken || localStorage.getItem('sv_gd_token');
+  if (!token) throw new Error('Not signed in to Google Drive');
+  const rootId = await gdEnsureFolder('SnapVault', token, null);
+  const subId  = await gdEnsureFolder(folder, token, rootId);
+  const mime   = type==='video' ? 'video/webm' : 'image/jpeg';
+  const form   = new FormData();
+  form.append('metadata', new Blob([JSON.stringify({name, parents:[subId]})], {type:'application/json'}));
+  form.append('file', blob);
+  const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+    method:'POST', headers:{Authorization:'Bearer '+token}, body:form
+  });
+  if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message||'GDrive error'); }
+}
+
+async function gdEnsureFolder(name, token, parentId) {
+  const q = `name='${name}' and mimeType='application/vnd.google-apps.folder'${parentId?` and '${parentId}' in parents`:''} and trashed=false`;
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`,
+    {headers:{Authorization:'Bearer '+token}});
+  const data = await res.json();
+  if (data.files?.length) return data.files[0].id;
+  const body = {name, mimeType:'application/vnd.google-apps.folder'};
+  if (parentId) body.parents = [parentId];
+  const cr = await fetch('https://www.googleapis.com/drive/v3/files', {
+    method:'POST', headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+    body: JSON.stringify(body)
+  });
+  return (await cr.json()).id;
+}
+
+async function uploadOneDrive(blob, name, folder, type) {
+  const token = msToken || localStorage.getItem('sv_ms_token');
+  if (!token) throw new Error('Not signed in to OneDrive');
+  const mime = type==='video' ? 'video/webm' : 'image/jpeg';
+  const res = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/SnapVault/${folder}/${name}:/content`, {
+    method:'PUT', headers:{Authorization:'Bearer '+token,'Content-Type':mime}, body:blob
+  });
+  if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message||'OneDrive error'); }
+}
+
+// ══════════════════════════════════════
+// FOLDERS
+// ══════════════════════════════════════
+async function loadFolders() {
+  if (ST.storage==='supabase' && SB && currentUser?.id !== 'gdrive' && currentUser?.id !== 'onedrive') {
+    try {
+      const {data} = await SB.storage.from('snapvault').list(currentUser.id+'/', {limit:100});
+      if (data) {
+        const f = data.filter(d=>d.id===null).map(d=>d.name);
+        if (f.length) folders = f;
+      }
+    } catch(e) {}
+    if (!folders.includes('unsorted')) folders.unshift('unsorted');
+  }
+  renderFolderGrid();
+  updateStats();
+}
+
+function renderFolderGrid() {
+  const grid = document.getElementById('folder-grid');
+  if (!folders.length) { grid.innerHTML = '<div style="grid-column:1/-1;font-family:var(--M);font-size:11px;color:var(--mu);text-align:center;padding:20px">No folders yet</div>'; return; }
+  grid.innerHTML = folders.map(f => `
+    <div class="fc" onclick="openFolder('${f}')">
+      <div class="fc-icon">📁</div>
+      <div class="fc-name">${f}</div>
+      <div class="fc-meta">${allMedia.filter(m=>m.folder===f).length} files</div>
+      <div class="fc-actions">
+        <button class="btn-share" onclick="event.stopPropagation();quickShare('${f}')">🔗 Share</button>
+      </div>
+    </div>`).join('');
+}
+
+async function createFolder() {
+  const inp = document.getElementById('nf-inp');
+  const name = sanitizeName(inp.value);
+  if (!name) { toast('Enter a name', 'err'); return; }
+  if (folders.includes(name)) { toast('Already exists', 'err'); return; }
+  folders.push(name); inp.value = '';
+  renderFolderGrid(); toast('Folder: ' + name, 'ok');
+  if (ST.storage==='supabase' && SB && currentUser) {
+    await SB.storage.from('snapvault').upload(`${currentUser.id}/${name}/.keep`, new Blob(['']), {upsert:true});
+  }
+}
+
+function openFolderModal() { document.getElementById('fm-inp').value=''; document.getElementById('folder-modal').classList.remove('hidden'); }
+function createFolderModal() {
+  const name = sanitizeName(document.getElementById('fm-inp').value);
+  if (!name) return;
+  if (!folders.includes(name)) folders.push(name);
+  renderFolderGrid();
+  document.getElementById('fm-inp').value='';
+  closeModal('folder-modal');
+  toast('Folder: '+name, 'ok');
+}
+
+function openFolder(f) { galFilter=f; showTab('gallery'); }
+
+// ══════════════════════════════════════
+// GALLERY
+// ══════════════════════════════════════
+async function loadGallery() {
+  allMedia = [];
+  if (ST.storage === 'demo') {
+    allMedia = [...demoMedia];
+  } else if (ST.storage==='supabase' && SB && currentUser?.id!=='gdrive' && currentUser?.id!=='onedrive') {
+    for (const folder of folders) {
+      try {
+        const {data} = await SB.storage.from('snapvault').list(`${currentUser.id}/${folder}/`, {limit:500});
+        if (data) {
+          data.filter(f=>f.name!=='.keep').forEach(f => {
+            const isVid = /\.(webm|mp4|mov)$/i.test(f.name);
+            const {data:u} = SB.storage.from('snapvault').getPublicUrl(`${currentUser.id}/${folder}/${f.name}`);
+            allMedia.push({name:f.name, folder, url:u.publicUrl, type:isVid?'video':'photo', path:`${currentUser.id}/${folder}/${f.name}`});
+          });
+        }
+      } catch(e) {}
+    }
+  }
+  renderChips(); renderGalleryGrid(); renderFolderGrid(); updateStats();
+}
+
+function renderChips() {
+  document.getElementById('chips').innerHTML =
+    `<div class="chip ${galFilter==='all'?'on':''}" onclick="filterGal('all')">All (${allMedia.length})</div>` +
+    folders.map(f => `<div class="chip ${galFilter===f?'on':''}" onclick="filterGal('${f}')">📂 ${f} (${allMedia.filter(m=>m.folder===f).length})</div>`).join('');
+}
+
+function filterGal(f) { galFilter=f; renderChips(); renderGalleryGrid(); }
+
+function renderGalleryGrid() {
+  const grid = document.getElementById('gal-grid');
+  const items = galFilter==='all' ? allMedia : allMedia.filter(m=>m.folder===galFilter);
+  if (!items.length) { grid.innerHTML='<div class="empty-st"><div class="ei">'+(galFilter==='all'?'🖼️':'📁')+'</div><p>Nothing here yet.</p></div>'; return; }
+  grid.innerHTML = `<div class="media-grid">${items.map((m,i)=>`
+    <div class="mi" onclick="openLB(${i})">
+      ${m.type==='video'
+        ? `<video src="${m.url}" preload="metadata" style="pointer-events:none"></video>
+           <div class="vplay"><div class="play-ic"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div>`
+        : `<img src="${m.url}" alt="${m.name}" loading="lazy"/>`}
+      <div class="mi-cap"><div class="mi-capname">${m.name}</div></div>
+      <div class="mi-tag ${m.type==='video'?'tag-v':'tag-p'}">${m.type==='video'?'VID':'IMG'}</div>
+    </div>`).join('')}</div>`;
+}
+
+// ══════════════════════════════════════
+// LIGHTBOX
+// ══════════════════════════════════════
+function openLB(i) {
+  const items = galFilter==='all' ? allMedia : allMedia.filter(m=>m.folder===galFilter);
+  if (!items[i]) return;
+  lbIndex = i; const m = items[i];
+  const img=document.getElementById('lb-img'), vid=document.getElementById('lb-vid');
+  if (m.type==='video') { img.style.display='none'; vid.style.display='block'; vid.src=m.url; }
+  else { vid.style.display='none'; img.style.display='block'; img.src=m.url; }
+  document.getElementById('lb-name').textContent = m.name;
+  document.getElementById('lb-meta').textContent = `📂 ${m.folder} · ${m.type}`;
+  document.getElementById('lb-dl').href = m.url;
+  document.getElementById('lb-dl').download = m.name;
+  document.getElementById('lb').classList.remove('hidden');
+}
+function closeLB() { const v=document.getElementById('lb-vid'); v.pause(); v.src=''; document.getElementById('lb').classList.add('hidden'); }
+async function copyMediaLink() {
+  const items = galFilter==='all' ? allMedia : allMedia.filter(m=>m.folder===galFilter);
+  if (items[lbIndex]) { await clip(items[lbIndex].url); toast('Link copied!','ok'); }
+}
+
+// ══════════════════════════════════════
+// SHARE
+// ══════════════════════════════════════
+function openShareModal() {
+  const sel = document.getElementById('share-sel');
+  sel.innerHTML = folders.map(f=>`<option value="${f}">${f}</option>`).join('');
+  genShareLink();
+  document.getElementById('share-modal').classList.remove('hidden');
+}
+async function genShareLink() {
+  const f = document.getElementById('share-sel').value;
+  const base = window.location.href.split('?')[0];
+  let link = `${base}?share=${btoa((currentUser?.id||'u')+'/'+f)}`;
+  if (ST.storage==='supabase' && SB && currentUser) {
+    const ph = allMedia.filter(m=>m.folder===f);
+    if (ph.length) {
+      const {data} = await SB.storage.from('snapvault').createSignedUrl(ph[0].path, 60*60*24*7);
+      if (data) link = `${base}?share=${btoa(currentUser.id+'/'+f)}`;
+    }
+  }
+  document.getElementById('share-link').value = link;
+}
+async function quickShare(f) { document.getElementById('share-sel').value=f; await genShareLink(); await clip(document.getElementById('share-link').value); toast('Share link copied: '+f,'ok'); }
+async function copyShare() { await clip(document.getElementById('share-link').value); toast('Link copied!','ok'); }
+
+// ══════════════════════════════════════
+// PROFILE
+// ══════════════════════════════════════
+function updateProfile() {
+  const email = currentUser?.email||'';
+  const st = ST.storage||'supabase';
+  document.getElementById('p-email').textContent = email;
+  document.getElementById('p-name').textContent  = email.split('@')[0]||'User';
+  document.getElementById('p-av').textContent    = (email[0]||'?').toUpperCase();
+  const lblMap = {demo:'Local Demo Mode',supabase:'Supabase Storage',gdrive:'Google Drive',onedrive:'Microsoft OneDrive'};
+  const badgeMap = {demo:'🧪',supabase:'🗄️',gdrive:'📗',onedrive:'🔷'};
+  document.getElementById('p-st-lbl').textContent    = lblMap[st]||'Supabase';
+  document.getElementById('p-av-badge').textContent  = badgeMap[st]||'☁️';
+  document.getElementById('cur-st-lbl').textContent  = lblMap[st]||'Supabase';
+  ['ss-supa','ss-gd','ss-od'].forEach(id => document.getElementById(id).className='ss-opt');
+  const idMap={supabase:'ss-supa',gdrive:'ss-gd',onedrive:'ss-od'};
+  const clMap={supabase:'on-supa',gdrive:'on-gd',onedrive:'on-od'};
+  document.getElementById(idMap[st])?.classList.add(clMap[st]);
+}
+
+function updateStats() {
+  loadQueue();
+  document.getElementById('s-ph').textContent = allMedia.filter(m=>m.type==='photo').length;
+  document.getElementById('s-vi').textContent = allMedia.filter(m=>m.type==='video').length;
+  document.getElementById('s-q').textContent  = queue.filter(q=>q.status==='pending').length;
+}
+
+// ══════════════════════════════════════
+// UI HELPERS
+// ══════════════════════════════════════
+function showScreen(id) {
+  ['loading-screen','auth-screen','storage-screen','app-screen']
+    .forEach(s => document.getElementById(s).classList.toggle('hidden', s!==id));
+}
+
+const TABS = {cam:'tab-cam',gallery:'tab-gallery',folders:'tab-folders',profile:'tab-profile'};
+function showTab(t) {
+  Object.entries(TABS).forEach(([k,v]) => {
+    document.getElementById(v).classList.toggle('hidden', k!==t);
+    document.getElementById('nav-'+k)?.classList.toggle('on', k===t);
+  });
+  if (t==='gallery') loadGallery();
+  if (t==='folders') loadFolders();
+  if (t==='profile') { updateProfile(); updateStats(); }
+}
+
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+document.querySelectorAll('.mbg').forEach(m => m.addEventListener('click', e => { if (e.target===m) m.classList.add('hidden'); }));
+
+function msg(id, txt, type) { const el=document.getElementById(id); el.textContent=txt; el.className='fmsg '+type; }
+
+function toast(text, type='info') {
+  const el = document.createElement('div');
+  el.className = `toast t-${type}`;
+  el.innerHTML = `<span>${{ok:'✓',err:'✕',info:'↑'}[type]||'·'}</span>${text}`;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+async function clip(txt) {
+  try { await navigator.clipboard.writeText(txt); }
+  catch(e) { const t=document.createElement('textarea'); t.value=txt; t.style.position='fixed'; t.style.opacity='0'; document.body.appendChild(t); t.focus(); t.select(); document.execCommand('copy'); document.body.removeChild(t); }
+}
+
+function sanitizeName(s) { return (s||'').trim().replace(/[^a-zA-Z0-9_\-\s]/g,'').replace(/\s+/g,'_'); }
+
+document.addEventListener('keydown', e => { if (e.key==='Escape') closeLB(); });
+document.getElementById('a-pass').addEventListener('keydown', e => { if (e.key==='Enter') doAuth(); });
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
