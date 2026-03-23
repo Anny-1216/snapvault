@@ -686,56 +686,71 @@ const ST = {
 // BOOT — fetch config from Vercel API
 // ══════════════════════════════════════
 window.addEventListener('DOMContentLoaded', async () => {
-  // Handle OAuth redirect FIRST
-  const oauthSuccess = await handleOAuthRedirect();
-  if (oauthSuccess) {
-    afterLogin();
-    return;
-  }
-
-  // Temporary local demo mode: bypass auth/setup
-  if (DEMO_MODE) {
-    currentUser = { email: 'demo@snapvault.local', id: 'demo-user' };
-    ST.storage = 'demo';
-    enterApp();
-    return;
-  }
-
-  // Fetch secure config from server
   try {
-    const res = await fetch('/api/config');
-    appConfig = await res.json();
-  } catch(e) {
-    // Dev fallback: if no /api/config (opening file locally), show message
-    showScreen('auth-screen');
-    msg('a-msg', 'Deploy to Vercel so /api/config can securely provide credentials.', 'e');
-    return;
-  }
+    // Handle OAuth redirect FIRST
+    const oauthSuccess = await handleOAuthRedirect();
 
-  // Init Supabase with server-provided keys
-  if (appConfig.supabaseUrl && appConfig.supabaseKey) {
-    SB = window.supabase.createClient(appConfig.supabaseUrl, appConfig.supabaseKey);
-  }
+    // Temporary local demo mode: bypass auth/setup
+    if (DEMO_MODE) {
+      currentUser = { email: 'demo@snapvault.local', id: 'demo-user' };
+      ST.storage = 'demo';
+      enterApp();
+      return;
+    }
 
-  // Check if already logged in
-  if (SB) {
-    const { data: { session } } = await SB.auth.getSession();
-    if (session) {
-      currentUser = session.user;
+    // Fetch secure config from server
+    try {
+      const res = await fetch('/api/config');
+      appConfig = await res.json();
+    } catch (e) {
+      showScreen('auth-screen');
+      msg('a-msg', 'Deploy to Vercel so /api/config can securely provide credentials.', 'e');
+      return;
+    }
+
+    // Init Supabase with server-provided keys
+    if (appConfig.supabaseUrl && appConfig.supabaseKey) {
+      if (!window.supabase || !window.supabase.createClient) {
+        showScreen('auth-screen');
+        msg('a-msg', 'Supabase client failed to load. Refresh once or disable strict tracking/privacy mode for this site.', 'e');
+        return;
+      }
+      SB = window.supabase.createClient(appConfig.supabaseUrl, appConfig.supabaseKey);
+    }
+
+    // Check if already logged in
+    if (SB) {
+      try {
+        const { data: { session } } = await SB.auth.getSession();
+        if (session) {
+          currentUser = session.user;
+          afterLogin();
+          return;
+        }
+      } catch (e) {
+        console.error('Session restore failed:', e);
+      }
+    }
+
+    // Restore OAuth tokens (Google/MS redirect came back)
+    restoreOAuthTokens();
+    if ((gdriveToken || msToken) && currentUser) {
       afterLogin();
       return;
     }
-  }
 
-  // Restore OAuth tokens (Google/MS redirect came back)
-  if (gdriveToken || msToken) {
-    if (gdriveToken) currentUser = { email: 'gdrive-user', id: 'gdrive' };
-    if (msToken)     currentUser = { email: 'onedrive-user', id: 'onedrive' };
-    afterLogin();
-    return;
-  }
+    if (oauthSuccess && !currentUser) {
+      showScreen('auth-screen');
+      msg('a-msg', 'OAuth completed. Please login again to link storage to your account.', 'e');
+      return;
+    }
 
-  showScreen('auth-screen');
+    showScreen('auth-screen');
+  } catch (e) {
+    console.error('Boot failed:', e);
+    showScreen('auth-screen');
+    msg('a-msg', 'Startup failed. Open DevTools console and share the first error line.', 'e');
+  }
 });
 
 // ══════════════════════════════════════
@@ -873,11 +888,13 @@ async function handleOAuthRedirect() {
       gdriveRefreshToken = data.refresh_token;
       localStorage.setItem('sv_gd_token', gdriveToken);
       localStorage.setItem('sv_gd_refresh', gdriveRefreshToken);
+      ST.storage = 'gdrive';
     } else if (provider === 'onedrive') {
       msToken = data.access_token;
       msRefreshToken = data.refresh_token;
       localStorage.setItem('sv_ms_token', msToken);
       localStorage.setItem('sv_ms_refresh', msRefreshToken);
+      ST.storage = 'onedrive';
     }
     
     localStorage.removeItem('sv_oauth_state');
@@ -1019,8 +1036,6 @@ function enterApp() {
   watchOnline();
   renderQueue();
 }
-  renderQueue();
-}
 
 // ══════════════════════════════════════
 // ONLINE WATCHER
@@ -1030,7 +1045,13 @@ function watchOnline() {
     const on = navigator.onLine;
     document.getElementById('odot').classList.toggle('off', !on);
     document.getElementById('olbl').textContent = on ? 'Online' : 'Offline';
-    if (on) processQueue();
+    if (!on) return;
+    const hasPending = queue.some(q => q.status === 'pending');
+    if (!hasPending) return;
+    const canUpload = ST.storage === 'demo'
+      || (ST.storage === 'gdrive' && !!(gdriveToken || localStorage.getItem('sv_gd_token')))
+      || (ST.storage === 'onedrive' && !!(msToken || localStorage.getItem('sv_ms_token')));
+    if (canUpload) processQueue();
   };
   window.addEventListener('online', upd);
   window.addEventListener('offline', upd);
@@ -1411,11 +1432,21 @@ function openFolderModal() { document.getElementById('fm-inp').value=''; documen
 function createFolderModal() {
   const name = sanitizeName(document.getElementById('fm-inp').value);
   if (!name) return;
-  if (!folders.includes(name)) folders.push(name);
+  const wasNew = !folders.includes(name);
+  if (wasNew) folders.push(name);
   renderFolderGrid();
   document.getElementById('fm-inp').value='';
   closeModal('folder-modal');
   toast('Folder: '+name, 'ok');
+  if (SB && currentUser?.id && wasNew) {
+    SB.from('folders').insert({
+      user_id: currentUser.id,
+      name,
+      storage_provider: ST.storage,
+    }).then(({ error }) => {
+      if (error) console.error('DB insert failed:', error);
+    });
+  }
 }
 
 function openFolder(f) { galFilter=f; showTab('gallery'); }
