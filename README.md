@@ -1,15 +1,131 @@
-# SnapVault — Deploy to Vercel
+# SnapVault — Secure Cloud Photo/Video Backup
+
+Capture photos and videos on your phone, upload them to **Google Drive** or **OneDrive**. Folders persist across sessions. Built with PWA, OAuth 2.0 + PKCE, Supabase.
+
+## Features
+- 📷 Camera capture (photo/video)
+- 💾 Auto-upload to Google Drive or OneDrive  
+- 📁 Persistent folder management (survives logout)
+- 🔐 Secure OAuth with refresh tokens
+- 📱 Works offline (queue mode)
+
+---
+
+## Quick Start
+
+### 1. Deploy to Vercel
+
+```bash
+git clone <your-repo>
+cd snapvault
+git push origin main
+```
+
+Then on **Vercel**:
+1. Import your GitHub repo
+2. Deploy (no build steps needed)
+3. Go to [**SETUP.md** for full configuration](./SETUP.md)
+
+---
+
+## User Flow
+
+1. **Create Account** — Email + password via Supabase
+2. **Choose Storage** — Google Drive or OneDrive
+3. **Authorize** — OAuth consent screen (grants folder access)
+4. **Capture & Upload** — Photos/videos go to Drive automatically
+5. **Folders Persist** — Even after logout, folders remain in your account
+
+---
+
+## For Developers
+
+### Environment Variables (Vercel)
+```
+SUPABASE_URL=<your-project-url>
+SUPABASE_ANON_KEY=<anon-key>
+SUPABASE_SERVICE_KEY=<service-key>
+GDRIVE_CLIENT_ID=<client-id>
+GDRIVE_CLIENT_SECRET=<secret>
+ONEDRIVE_CLIENT_ID=<client-id>
+ONEDRIVE_CLIENT_SECRET=<secret>
+REDIRECT_URI=https://yourapp.vercel.app
+```
+
+⚠️ Secrets are **never exposed to frontend** — /api/config handles OAuth token exchange server-side.
+
+### Local Testing
+```bash
+python3 -m http.server 8080 --directory public
+```
+
+Open `http://localhost:8080/?demo=1` for demo mode (no auth needed).
+
+### Database Setup
+See [SETUP.md](./SETUP.md) for Supabase table creation SQL.
+
+---
+
+## Architecture
+
+```
+Frontend (PWA) ←→ Vercel API (/api/config) ←→ OAuth Providers
+                                            ↓
+                                    Supabase (users, folders DB)
+                      
+                            Google Drive / OneDrive (file storage)
+```
+
+### What Changed (v2)
+✅ **Authorization Code + PKCE** — No more token expiry errors  
+✅ **Persistent Folders** — Stored in Supabase, not localStorage  
+✅ **Drive-Only Upload** — Removed Supabase storage, uses Google Drive / OneDrive  
+✅ **Token Refresh** — Automatic retry on token expiry  
+
+---
 
 ## Project Structure
 ```
 snapvault/
 ├── public/
-│   └── index.html       ← the entire PWA
+│   ├── index.html       ← PWA (entire UI + JS)
+│   ├── manifest.webmanifest
+│   └── sw.js            ← Service worker (offline support)
 ├── api/
-│   └── config.js        ← serverless function (serves keys safely)
-├── vercel.json          ← routing config
+│   └── config.js        ← Serverless: OAuth token exchange
+├── vercel.json          ← Routing config
+├── .env.example         ← Environment variables template
+├── SETUP.md             ← Full deployment guide
 └── README.md
 ```
+
+---
+
+## Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| Folders disappear on logout | ✅ Fixed — stored in database now |
+| Upload fails with "invalid auth" | ✅ Fixed — automatic token refresh |
+| OAuth redirect doesn't work | Check `REDIRECT_URI` matches your Vercel domain |
+
+See [SETUP.md](./SETUP.md) for detailed troubleshooting.
+
+---
+
+## Security
+
+- ✅ OAuth 2.0 + PKCE prevents authorization code interception
+- ✅ Refresh tokens stored server-side in Supabase (not localStorage)
+- ✅ Row-Level Security (RLS) enforces per-user data access
+- ✅ No sensitive secrets exposed to frontend
+- ✅ Uses browser APIs: Camera, Storage, File APIs
+
+---
+
+## License
+
+MIT
 
 ---
 
@@ -70,34 +186,9 @@ For demo bypass mode on phone, open:
 
 ---
 
-## Step 3 — Add Environment Variables
+## Step 3 — Complete Setup
 
-In your Vercel project → **Settings → Environment Variables**, add:
-
-| Variable Name         | Value                                 | Required?      |
-|-----------------------|---------------------------------------|----------------|
-| `SUPABASE_URL`        | https://xxxx.supabase.co             | If using Supa  |
-| `SUPABASE_ANON_KEY`   | eyJhbGci...                          | If using Supa  |
-| `GDRIVE_CLIENT_ID`    | xxxx.apps.googleusercontent.com      | If using GDrive|
-| `ONEDRIVE_CLIENT_ID`  | xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx | If using OD    |
-
-> ⚠️ These NEVER appear in the HTML. They live on Vercel's server only.
-> The frontend fetches them securely via /api/config at runtime.
-
-Redeploy after adding env vars.
-
----
-
-## Production checklist
-
-- Keep `DEMO_BUILD_ENABLED = false` for production deploys.
-- Keep all client IDs and Supabase values in Vercel env vars only.
-- Verify `/api/config` returns expected values and no secrets beyond public client config.
-- Confirm Supabase bucket and storage policies are configured before launch.
-
----
-
-## Step 4 — Supabase Storage Setup
+**→ See [SETUP.md](./SETUP.md) for detailed OAuth configuration**
 
 1. Go to your Supabase project → **Storage**
 2. Create a bucket named exactly: `snapvault`

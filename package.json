@@ -1,0 +1,18 @@
+{
+  "name": "snapvault",
+  "version": "2.0.0",
+  "description": "Secure cloud photo/video backup with Google Drive & OneDrive",
+  "type": "module",
+  "main": "api/config.js",
+  "scripts": {
+    "dev": "python3 -m http.server 8080 --directory public",
+    "test": "echo \"No tests yet\""
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.38.4"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": "18.x"
+  }
+}

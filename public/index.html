@@ -669,7 +669,7 @@ let mediaRec = null, recInv = null, recSec = 0;
 let capturedBlob = null, capturedUrl = null, capturedType = 'photo';
 let capMode = 'photo';
 let lbIndex = 0, galFilter = 'all';
-let gdriveToken = null, msToken = null;
+let gdriveToken = null, msToken = null, gdriveRefreshToken = null, msRefreshToken = null;
 const DEMO_BUILD_ENABLED = false;
 const DEMO_MODE = (() => {
   const params = new URLSearchParams(window.location.search);
@@ -686,8 +686,12 @@ const ST = {
 // BOOT — fetch config from Vercel API
 // ══════════════════════════════════════
 window.addEventListener('DOMContentLoaded', async () => {
-  // Handle OAuth redirect tokens FIRST
-  handleOAuthTokens();
+  // Handle OAuth redirect FIRST
+  const oauthSuccess = await handleOAuthRedirect();
+  if (oauthSuccess) {
+    afterLogin();
+    return;
+  }
 
   // Temporary local demo mode: bypass auth/setup
   if (DEMO_MODE) {
@@ -812,50 +816,172 @@ function changeStorage(s) {
 }
 
 // ══════════════════════════════════════
-// OAUTH — Google Drive / OneDrive
+// PKCE HELPERS
 // ══════════════════════════════════════
-function handleOAuthTokens() {
-  const hash = window.location.hash;
-  if (!hash) return;
-  const p = new URLSearchParams(hash.replace('#',''));
-  const token = p.get('access_token');
-  if (!token) return;
-  // Detect which service based on URL or stored intent
-  const intent = localStorage.getItem('sv_oauth_intent');
-  if (intent === 'gdrive') {
-    gdriveToken = token;
-    localStorage.setItem('sv_gd_token', token);
-    ST.storage = 'gdrive';
-  } else if (intent === 'onedrive') {
-    msToken = token;
-    localStorage.setItem('sv_ms_token', token);
-    ST.storage = 'onedrive';
+function generatePKCEChallenge() {
+  const codeVerifier = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+    .map(b => String.fromCharCode(b))
+    .join('');
+  const verifier = btoa(codeVerifier).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  
+  const enc = new TextEncoder();
+  const arr = enc.encode(verifier);
+  return crypto.subtle.digest('SHA-256', arr).then(hashBuffer => {
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const challenge = btoa(String.fromCharCode.apply(null, hashArray))
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    return { verifier, challenge };
+  });
+}
+
+// ══════════════════════════════════════
+// OAUTH — Google Drive / OneDrive with Authorization Code + PKCE
+// ══════════════════════════════════════
+async function handleOAuthRedirect() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  const state = params.get('state');
+  
+  if (!code || !state) return false;
+
+  const stored = JSON.parse(localStorage.getItem('sv_oauth_state') || '{}');
+  if (stored.state !== state) {
+    console.error('State mismatch - possible CSRF attack');
+    return false;
   }
-  localStorage.removeItem('sv_oauth_intent');
-  window.history.replaceState(null, '', window.location.pathname);
+
+  const provider = stored.provider;
+  const codeVerifier = stored.codeVerifier;
+  
+  try {
+    const res = await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: `exchange_${provider}_token`,
+        code,
+        codeVerifier,
+        userId: currentUser?.id,
+      }),
+    });
+    
+    if (!res.ok) throw new Error(await res.text());
+    
+    const data = await res.json();
+    if (provider === 'gdrive') {
+      gdriveToken = data.access_token;
+      gdriveRefreshToken = data.refresh_token;
+      localStorage.setItem('sv_gd_token', gdriveToken);
+      localStorage.setItem('sv_gd_refresh', gdriveRefreshToken);
+    } else if (provider === 'onedrive') {
+      msToken = data.access_token;
+      msRefreshToken = data.refresh_token;
+      localStorage.setItem('sv_ms_token', msToken);
+      localStorage.setItem('sv_ms_refresh', msRefreshToken);
+    }
+    
+    localStorage.removeItem('sv_oauth_state');
+    window.history.replaceState({}, document.title, window.location.pathname);
+    return true;
+  } catch (e) {
+    console.error('OAuth exchange failed:', e);
+    return false;
+  }
 }
 
 function restoreOAuthTokens() {
   gdriveToken = localStorage.getItem('sv_gd_token') || null;
-  msToken     = localStorage.getItem('sv_ms_token') || null;
+  gdriveRefreshToken = localStorage.getItem('sv_gd_refresh') || null;
+  msToken = localStorage.getItem('sv_ms_token') || null;
+  msRefreshToken = localStorage.getItem('sv_ms_refresh') || null;
 }
 
-function signInGoogle() {
+async function refreshAccessToken(provider) {
+  const refreshToken = provider === 'gdrive' ? gdriveRefreshToken : msRefreshToken;
+  if (!refreshToken) return null;
+  
+  try {
+    const res = await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'refresh_token',
+        provider,
+        refreshToken,
+      }),
+    });
+    
+    if (!res.ok) throw new Error('Token refresh failed');
+    
+    const data = await res.json();
+    const token = data.access_token;
+    
+    if (provider === 'gdrive') {
+      gdriveToken = token;
+      localStorage.setItem('sv_gd_token', token);
+    } else if (provider === 'onedrive') {
+      msToken = token;
+      localStorage.setItem('sv_ms_token', token);
+    }
+    
+    return token;
+  } catch (e) {
+    console.error('Token refresh failed:', e);
+    return null;
+  }
+}
+
+async function signInGoogle() {
   const id = appConfig.gdriveClientId;
-  if (!id) { msg('sp-msg','Google Client ID not set in Vercel env (GDRIVE_CLIENT_ID)','e'); return; }
-  localStorage.setItem('sv_oauth_intent','gdrive');
-  const redirect = encodeURIComponent(window.location.origin);
-  const scope    = encodeURIComponent('https://www.googleapis.com/auth/drive.file');
-  window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${id}&redirect_uri=${redirect}&response_type=token&scope=${scope}`;
+  if (!id) { msg('sp-msg','Google Client ID not set in Vercel env','e'); return; }
+  
+  const { verifier, challenge } = await generatePKCEChallenge();
+  const state = Math.random().toString(36).substring(7);
+  
+  localStorage.setItem('sv_oauth_state', JSON.stringify({
+    provider: 'gdrive',
+    state,
+    codeVerifier: verifier,
+  }));
+  
+  const params = new URLSearchParams({
+    client_id: id,
+    redirect_uri: window.location.origin,
+    response_type: 'code',
+    scope: 'https://www.googleapis.com/auth/drive.file',
+    code_challenge: challenge,
+    code_challenge_method: 'S256',
+    state,
+    access_type: 'offline',
+  });
+  
+  window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
 }
 
-function signInMicrosoft() {
+async function signInMicrosoft() {
   const id = appConfig.onedriveClientId;
-  if (!id) { msg('sp-msg','OneDrive Client ID not set in Vercel env (ONEDRIVE_CLIENT_ID)','e'); return; }
-  localStorage.setItem('sv_oauth_intent','onedrive');
-  const redirect = encodeURIComponent(window.location.origin);
-  const scope    = encodeURIComponent('Files.ReadWrite offline_access');
-  window.location.href = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${id}&response_type=token&redirect_uri=${redirect}&scope=${scope}`;
+  if (!id) { msg('sp-msg','OneDrive Client ID not set in Vercel env','e'); return; }
+  
+  const { verifier, challenge } = await generatePKCEChallenge();
+  const state = Math.random().toString(36).substring(7);
+  
+  localStorage.setItem('sv_oauth_state', JSON.stringify({
+    provider: 'onedrive',
+    state,
+    codeVerifier: verifier,
+  }));
+  
+  const params = new URLSearchParams({
+    client_id: id,
+    redirect_uri: window.location.origin,
+    response_type: 'code',
+    scope: 'Files.ReadWrite offline_access',
+    code_challenge: challenge,
+    code_challenge_method: 'S256',
+    state,
+  });
+  
+  window.location.href = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params}`;
 }
 
 async function doSignOut() {
@@ -865,9 +991,11 @@ async function doSignOut() {
   }
   if (SB) await SB.auth.signOut();
   localStorage.removeItem('sv_gd_token');
+  localStorage.removeItem('sv_gd_refresh');
   localStorage.removeItem('sv_ms_token');
+  localStorage.removeItem('sv_ms_refresh');
   localStorage.removeItem('sv_st');
-  gdriveToken = msToken = currentUser = null;
+  gdriveToken = msToken = gdriveRefreshToken = msRefreshToken = currentUser = null;
   ST.storage = null;
   showScreen('auth-screen');
   toast('Signed out','info');
@@ -889,6 +1017,8 @@ function enterApp() {
   loadGallery();
   updateProfile();
   watchOnline();
+  renderQueue();
+}
   renderQueue();
 }
 
@@ -1131,16 +1261,12 @@ async function uploadBlob(blob, folder, name, type) {
   const st = ST.storage;
   if (st === 'demo') {
     await uploadDemo(blob, folder, name, type);
-  } else if (st === 'supabase') {
-    if (!SB||!currentUser) throw new Error('Supabase not ready');
-    const path = `${currentUser.id}/${folder}/${name}`;
-    const mime = type==='video' ? 'video/webm' : 'image/jpeg';
-    const {error} = await SB.storage.from('snapvault').upload(path, blob, {contentType:mime, upsert:true});
-    if (error) throw error;
   } else if (st === 'gdrive') {
     await uploadGDrive(blob, name, folder, type);
   } else if (st === 'onedrive') {
     await uploadOneDrive(blob, name, folder, type);
+  } else {
+    throw new Error('Unsupported storage provider');
   }
 }
 
@@ -1221,19 +1347,25 @@ async function uploadOneDrive(blob, name, folder, type) {
 }
 
 // ══════════════════════════════════════
-// FOLDERS
+// FOLDERS — Load from Supabase, persist to DB
 // ══════════════════════════════════════
 async function loadFolders() {
-  if (ST.storage==='supabase' && SB && currentUser?.id !== 'gdrive' && currentUser?.id !== 'onedrive') {
-    try {
-      const {data} = await SB.storage.from('snapvault').list(currentUser.id+'/', {limit:100});
-      if (data) {
-        const f = data.filter(d=>d.id===null).map(d=>d.name);
-        if (f.length) folders = f;
-      }
-    } catch(e) {}
-    if (!folders.includes('unsorted')) folders.unshift('unsorted');
+  if (!SB || !currentUser?.id) return;
+  
+  try {
+    const { data, error } = await SB.from('folders')
+      .select('name')
+      .eq('user_id', currentUser.id)
+      .eq('storage_provider', ST.storage);
+    
+    if (!error && data?.length) {
+      folders = data.map(f => f.name);
+    }
+  } catch(e) {
+    console.error('Load folders failed:', e);
   }
+  
+  if (!folders.includes('unsorted')) folders.unshift('unsorted');
   renderFolderGrid();
   updateStats();
 }
@@ -1257,10 +1389,21 @@ async function createFolder() {
   const name = sanitizeName(inp.value);
   if (!name) { toast('Enter a name', 'err'); return; }
   if (folders.includes(name)) { toast('Already exists', 'err'); return; }
-  folders.push(name); inp.value = '';
-  renderFolderGrid(); toast('Folder: ' + name, 'ok');
-  if (ST.storage==='supabase' && SB && currentUser) {
-    await SB.storage.from('snapvault').upload(`${currentUser.id}/${name}/.keep`, new Blob(['']), {upsert:true});
+  
+  // Add to local list
+  folders.push(name);
+  inp.value = '';
+  renderFolderGrid();
+  toast('Folder: ' + name, 'ok');
+  
+  // Persist to Supabase
+  if (SB && currentUser?.id) {
+    const { error } = await SB.from('folders').insert({
+      user_id: currentUser.id,
+      name,
+      storage_provider: ST.storage,
+    });
+    if (error) console.error('DB insert failed:', error);
   }
 }
 
@@ -1278,27 +1421,118 @@ function createFolderModal() {
 function openFolder(f) { galFilter=f; showTab('gallery'); }
 
 // ══════════════════════════════════════
-// GALLERY
+// GALLERY — Load from Google Drive / OneDrive
 // ══════════════════════════════════════
 async function loadGallery() {
   allMedia = [];
   if (ST.storage === 'demo') {
     allMedia = [...demoMedia];
-  } else if (ST.storage==='supabase' && SB && currentUser?.id!=='gdrive' && currentUser?.id!=='onedrive') {
-    for (const folder of folders) {
-      try {
-        const {data} = await SB.storage.from('snapvault').list(`${currentUser.id}/${folder}/`, {limit:500});
-        if (data) {
-          data.filter(f=>f.name!=='.keep').forEach(f => {
-            const isVid = /\.(webm|mp4|mov)$/i.test(f.name);
-            const {data:u} = SB.storage.from('snapvault').getPublicUrl(`${currentUser.id}/${folder}/${f.name}`);
-            allMedia.push({name:f.name, folder, url:u.publicUrl, type:isVid?'video':'photo', path:`${currentUser.id}/${folder}/${f.name}`});
-          });
-        }
-      } catch(e) {}
-    }
+  } else if (ST.storage === 'gdrive') {
+    await loadGalleryGDrive();
+  } else if (ST.storage === 'onedrive') {
+    await loadGalleryOneDrive();
   }
   renderChips(); renderGalleryGrid(); renderFolderGrid(); updateStats();
+}
+
+async function loadGalleryGDrive() {
+  let token = gdriveToken || localStorage.getItem('sv_gd_token');
+  if (!token) return;
+  
+  for (const folder of folders) {
+    try {
+      const folderId = await gdGetFolderId(folder);
+      if (!folderId) continue;
+      
+      const q = `'${folderId}' in parents and trashed=false`;
+      const res = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType)&pageSize=100`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      if (res.status === 401) {
+        token = await refreshAccessToken('gdrive');
+        if (!token) continue;
+      }
+      
+      const data = await res.json();
+      if (data.files) {
+        for (const file of data.files) {
+          const isVid = /\/(mp4|webm|quicktime)/.test(file.mimeType);
+          allMedia.push({
+            name: file.name,
+            folder,
+            url: `https://drive.google.com/uc?id=${file.id}&export=download`,
+            type: isVid ? 'video' : 'photo',
+            id: file.id
+          });
+        }
+      }
+    } catch(e) {
+      console.error('Load folder error:', e);
+    }
+  }
+}
+
+async function gdGetFolderId(folderName) {
+  const token = gdriveToken || localStorage.getItem('sv_gd_token');
+  if (!token) return null;
+  
+  const q = `name='SnapVault' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  
+  const data = await res.json();
+  if (!data.files?.length) return null;
+  
+  const rootId = data.files[0].id;
+  const subQ = `name='${folderName}' and '${rootId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+  const subRes = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(subQ)}&fields=files(id)`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  
+  const subData = await subRes.json();
+  return subData.files?.[0]?.id || null;
+}
+
+async function loadGalleryOneDrive() {
+  let token = msToken || localStorage.getItem('sv_ms_token');
+  if (!token) return;
+  
+  for (const folder of folders) {
+    try {
+      const res = await fetch(
+        `https://graph.microsoft.com/v1.0/me/drive/root:/SnapVault/${folder}:/children`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      if (res.status === 401) {
+        token = await refreshAccessToken('onedrive');
+        if (!token) continue;
+      }
+      
+      if (!res.ok) continue;
+      
+      const data = await res.json();
+      if (data.value) {
+        for (const file of data.value) {
+          const isVid = file.file?.mimeType?.includes('video');
+          allMedia.push({
+            name: file.name,
+            folder,
+            url: file['@microsoft.graph.downloadUrl'] || file.webUrl,
+            type: isVid ? 'video' : 'photo',
+            id: file.id
+          });
+        }
+      }
+    } catch(e) {
+      console.error('Load OneDrive folder error:', e);
+    }
+  }
 }
 
 function renderChips() {
