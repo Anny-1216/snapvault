@@ -855,6 +855,14 @@ function pickStorage(s) {
 
   document.getElementById('sp-gd').style.display   = s==='gdrive'   ? '' : 'none';
   document.getElementById('sp-od').style.display   = s==='onedrive' ? '' : 'none';
+
+  if (!navigator.onLine) {
+    msg('sp-msg', 'You are offline. Connect to internet to sign in.', 'e');
+    return;
+  }
+
+  if (s === 'gdrive') signInGoogle();
+  if (s === 'onedrive') signInMicrosoft();
 }
 
 function confirmStorage(s) {
