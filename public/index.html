@@ -85,13 +85,12 @@ select.inp{cursor:pointer}
 /* ═══════════════════════════
    STORAGE PICKER SCREEN
 ═══════════════════════════ */
-.st-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}
+.st-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 .st-opt{padding:18px 8px;border:1px solid var(--bdr2);border-radius:var(--r);background:var(--bg2);
   cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:8px;
   transition:all .2s;color:var(--mu2);font-size:12px;font-weight:700;text-align:center}
 .st-opt .ico{font-size:26px}
 .st-opt:hover{border-color:var(--acc);color:var(--txt);transform:translateY(-2px)}
-.st-opt.sel-supa{border-color:var(--acc);background:rgba(124,110,255,.12);color:var(--acc)}
 .st-opt.sel-gd{border-color:#34a853;background:rgba(52,168,83,.1);color:#34a853}
 .st-opt.sel-od{border-color:#0078d4;background:rgba(0,120,212,.1);color:#0078d4}
 
@@ -259,13 +258,12 @@ select.inp{cursor:pointer}
 .cfg-card{background:var(--surf);border:1px solid var(--bdr);border-radius:var(--r2);padding:16px;margin-bottom:10px}
 
 /* storage switch in profile */
-.st-switch-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px}
+.st-switch-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
 .ss-opt{padding:11px 6px;border:1px solid var(--bdr2);border-radius:10px;background:var(--bg2);cursor:pointer;
   display:flex;flex-direction:column;align-items:center;gap:5px;transition:all .2s;
   color:var(--mu2);font-size:11px;font-weight:600}
 .ss-opt .si{font-size:18px}
 .ss-opt:hover{border-color:var(--acc);color:var(--txt)}
-.ss-opt.on-supa{border-color:var(--acc);background:rgba(124,110,255,.12);color:var(--acc)}
 .ss-opt.on-gd{border-color:#34a853;background:rgba(52,168,83,.1);color:#34a853}
 .ss-opt.on-od{border-color:#0078d4;background:rgba(0,120,212,.1);color:#0078d4}
 
@@ -391,9 +389,6 @@ select.inp{cursor:pointer}
       <div>
         <div class="lbl" style="margin-bottom:10px">Choose your cloud storage</div>
         <div class="st-grid">
-          <div class="st-opt" id="so-supa" onclick="pickStorage('supabase')">
-            <span class="ico">🗄️</span>Supabase
-          </div>
           <div class="st-opt" id="so-gd" onclick="pickStorage('gdrive')">
             <span class="ico">📗</span>Google Drive
           </div>
@@ -401,15 +396,6 @@ select.inp{cursor:pointer}
             <span class="ico">🔷</span>OneDrive
           </div>
         </div>
-      </div>
-
-      <!-- Supabase: no keys — configured via Vercel env -->
-      <div id="sp-supa" style="display:none">
-        <div class="info-box">
-          <strong>Supabase</strong> is already configured via your Vercel environment variables.<br/>
-          No keys needed here — they're kept safe on the server.
-        </div>
-        <button class="btn btn-g" style="margin-top:10px" onclick="confirmStorage('supabase')">Use Supabase →</button>
       </div>
 
       <!-- Google Drive -->
@@ -540,7 +526,7 @@ select.inp{cursor:pointer}
       </div>
       <div class="p-name" id="p-name">User</div>
       <div class="p-email" id="p-email"></div>
-      <div class="p-st-lbl" id="p-st-lbl">Supabase</div>
+      <div class="p-st-lbl" id="p-st-lbl">Cloud Storage</div>
     </div>
     <div class="stats-row">
       <div class="stat"><div class="stat-v" id="s-ph">0</div><div class="stat-l">Photos</div></div>
@@ -551,10 +537,9 @@ select.inp{cursor:pointer}
     <div class="psec">Change Storage</div>
     <div class="cfg-card">
       <div style="font-family:var(--M);font-size:10px;color:var(--mu);margin-bottom:10px">
-        Current: <span id="cur-st-lbl" style="color:var(--txt)">Supabase</span>
+        Current: <span id="cur-st-lbl" style="color:var(--txt)">Not selected</span>
       </div>
       <div class="st-switch-grid">
-        <div class="ss-opt" id="ss-supa" onclick="changeStorage('supabase')"><span class="si">🗄️</span>Supabase</div>
         <div class="ss-opt" id="ss-gd" onclick="changeStorage('gdrive')"><span class="si">📗</span>Google Drive</div>
         <div class="ss-opt" id="ss-od" onclick="changeStorage('onedrive')"><span class="si">🔷</span>OneDrive</div>
       </div>
@@ -682,11 +667,38 @@ const ST = {
   set storage(v){ localStorage.setItem('sv_st',v) },
 };
 
+function getCachedUser() {
+  try { return JSON.parse(localStorage.getItem('sv_user') || 'null'); }
+  catch { return null; }
+}
+
+function cacheUser(user) {
+  if (!user) return;
+  const safeUser = { id: user.id, email: user.email || '' };
+  localStorage.setItem('sv_user', JSON.stringify(safeUser));
+}
+
+function clearCachedUser() {
+  localStorage.removeItem('sv_user');
+}
+
+function normalizeStorageSelection() {
+  const st = ST.storage;
+  if (!st) return;
+  const valid = ['gdrive', 'onedrive', 'demo'];
+  if (!valid.includes(st)) {
+    localStorage.removeItem('sv_st');
+  }
+}
+
 // ══════════════════════════════════════
 // BOOT — fetch config from Vercel API
 // ══════════════════════════════════════
 window.addEventListener('DOMContentLoaded', async () => {
   try {
+    normalizeStorageSelection();
+    restoreOAuthTokens();
+
     // Handle OAuth redirect FIRST
     const oauthSuccess = await handleOAuthRedirect();
 
@@ -702,10 +714,30 @@ window.addEventListener('DOMContentLoaded', async () => {
     try {
       const res = await fetch('/api/config');
       appConfig = await res.json();
+      localStorage.setItem('sv_cfg', JSON.stringify(appConfig));
     } catch (e) {
-      showScreen('auth-screen');
-      msg('a-msg', 'Deploy to Vercel so /api/config can securely provide credentials.', 'e');
-      return;
+      try {
+        appConfig = JSON.parse(localStorage.getItem('sv_cfg') || '{}');
+      } catch {
+        appConfig = {};
+      }
+      if (!appConfig.supabaseUrl || !appConfig.supabaseKey) {
+        if (!navigator.onLine) {
+          const cachedUser = getCachedUser();
+          if (cachedUser && ST.storage) {
+            currentUser = cachedUser;
+            enterApp();
+            toast('Offline mode: queued uploads will sync when online', 'info');
+            return;
+          }
+          showScreen('auth-screen');
+          msg('a-msg', 'You are offline. Connect once to sign in, then offline mode will work.', 'e');
+          return;
+        }
+        showScreen('auth-screen');
+        msg('a-msg', 'Deploy to Vercel so /api/config can securely provide credentials.', 'e');
+        return;
+      }
     }
 
     // Init Supabase with server-provided keys
@@ -724,6 +756,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         const { data: { session } } = await SB.auth.getSession();
         if (session) {
           currentUser = session.user;
+          cacheUser(currentUser);
           afterLogin();
           return;
         }
@@ -732,8 +765,18 @@ window.addEventListener('DOMContentLoaded', async () => {
       }
     }
 
-    // Restore OAuth tokens (Google/MS redirect came back)
-    restoreOAuthTokens();
+    // Offline fallback with cached user
+    if (!navigator.onLine) {
+      const cachedUser = getCachedUser();
+      if (cachedUser && ST.storage) {
+        currentUser = cachedUser;
+        afterLogin();
+        toast('Offline mode: queued uploads will sync when online', 'info');
+        return;
+      }
+    }
+
+    // OAuth-token fallback
     if ((gdriveToken || msToken) && currentUser) {
       afterLogin();
       return;
@@ -765,6 +808,10 @@ function setMode(m) {
 }
 
 async function doAuth() {
+  if (!navigator.onLine) {
+    msg('a-msg', 'You are offline. Connect to internet to login/signup.', 'e');
+    return;
+  }
   if (!SB) { msg('a-msg','Supabase not configured yet. Add Vercel env vars and redeploy.','e'); return; }
   const email = document.getElementById('a-email').value.trim();
   const pass  = document.getElementById('a-pass').value;
@@ -777,7 +824,7 @@ async function doAuth() {
     else                    res = await SB.auth.signUp({email,password:pass});
     if (res.error) { msg('a-msg', res.error.message, 'e'); }
     else if (authMode==='signup') { msg('a-msg','Account created! Login now.','s'); setMode('login'); }
-    else { currentUser = res.data.user||res.data.session?.user; afterLogin(); }
+    else { currentUser = res.data.user||res.data.session?.user; cacheUser(currentUser); afterLogin(); }
   } catch(e) { msg('a-msg', e.message, 'e'); }
   btn.disabled = false; btn.textContent = authMode==='login'?'Login':'Create Account';
 }
@@ -798,14 +845,14 @@ function afterLogin() {
 // STORAGE PICKER
 // ══════════════════════════════════════
 function pickStorage(s) {
+  if (!['gdrive', 'onedrive'].includes(s)) return;
   // Reset highlights
-  ['so-supa','so-gd','so-od'].forEach(id => {
+  ['so-gd','so-od'].forEach(id => {
     document.getElementById(id).className = 'st-opt';
   });
-  const clsMap = { supabase:'sel-supa', gdrive:'sel-gd', onedrive:'sel-od' };
-  document.getElementById({supabase:'so-supa',gdrive:'so-gd',onedrive:'so-od'}[s]).classList.add(clsMap[s]);
+  const clsMap = { gdrive:'sel-gd', onedrive:'sel-od' };
+  document.getElementById({gdrive:'so-gd',onedrive:'so-od'}[s]).classList.add(clsMap[s]);
 
-  document.getElementById('sp-supa').style.display = s==='supabase' ? '' : 'none';
   document.getElementById('sp-gd').style.display   = s==='gdrive'   ? '' : 'none';
   document.getElementById('sp-od').style.display   = s==='onedrive' ? '' : 'none';
 }
@@ -813,6 +860,10 @@ function pickStorage(s) {
 function confirmStorage(s) {
   if (DEMO_MODE) {
     toast('Storage locked in demo mode', 'info');
+    return;
+  }
+  if (!['gdrive', 'onedrive'].includes(s)) {
+    toast('Please select Google Drive or OneDrive', 'err');
     return;
   }
   ST.storage = s;
@@ -825,6 +876,7 @@ function changeStorage(s) {
     toast('Storage switching disabled in demo mode', 'info');
     return;
   }
+  if (!['gdrive', 'onedrive'].includes(s)) return;
   ST.storage = null;
   showScreen('storage-screen');
   pickStorage(s);
@@ -1012,6 +1064,7 @@ async function doSignOut() {
   localStorage.removeItem('sv_ms_token');
   localStorage.removeItem('sv_ms_refresh');
   localStorage.removeItem('sv_st');
+  clearCachedUser();
   gdriveToken = msToken = gdriveRefreshToken = msRefreshToken = currentUser = null;
   ST.storage = null;
   showScreen('auth-screen');
@@ -1641,18 +1694,18 @@ async function copyShare() { await clip(document.getElementById('share-link').va
 // ══════════════════════════════════════
 function updateProfile() {
   const email = currentUser?.email||'';
-  const st = ST.storage||'supabase';
+  const st = ST.storage||'none';
   document.getElementById('p-email').textContent = email;
   document.getElementById('p-name').textContent  = email.split('@')[0]||'User';
   document.getElementById('p-av').textContent    = (email[0]||'?').toUpperCase();
-  const lblMap = {demo:'Local Demo Mode',supabase:'Supabase Storage',gdrive:'Google Drive',onedrive:'Microsoft OneDrive'};
-  const badgeMap = {demo:'🧪',supabase:'🗄️',gdrive:'📗',onedrive:'🔷'};
-  document.getElementById('p-st-lbl').textContent    = lblMap[st]||'Supabase';
+  const lblMap = {none:'Not selected',demo:'Local Demo Mode',gdrive:'Google Drive',onedrive:'Microsoft OneDrive'};
+  const badgeMap = {none:'☁️',demo:'🧪',gdrive:'📗',onedrive:'🔷'};
+  document.getElementById('p-st-lbl').textContent    = lblMap[st]||'Not selected';
   document.getElementById('p-av-badge').textContent  = badgeMap[st]||'☁️';
-  document.getElementById('cur-st-lbl').textContent  = lblMap[st]||'Supabase';
-  ['ss-supa','ss-gd','ss-od'].forEach(id => document.getElementById(id).className='ss-opt');
-  const idMap={supabase:'ss-supa',gdrive:'ss-gd',onedrive:'ss-od'};
-  const clMap={supabase:'on-supa',gdrive:'on-gd',onedrive:'on-od'};
+  document.getElementById('cur-st-lbl').textContent  = lblMap[st]||'Not selected';
+  ['ss-gd','ss-od'].forEach(id => document.getElementById(id).className='ss-opt');
+  const idMap={gdrive:'ss-gd',onedrive:'ss-od'};
+  const clMap={gdrive:'on-gd',onedrive:'on-od'};
   document.getElementById(idMap[st])?.classList.add(clMap[st]);
 }
 
