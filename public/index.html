@@ -569,6 +569,68 @@ const ST = {
   set storage(v){ if(v) localStorage.setItem('sv_st',v); else localStorage.removeItem('sv_st'); },
 };
 
+const IDB = {
+  db: null,
+
+  async open() {
+    if (this.db) return this.db;
+    return new Promise((res, rej) => {
+      const req = indexedDB.open('snapvault', 1);
+      req.onupgradeneeded = e => {
+        e.target.result.createObjectStore('blobs', { keyPath: 'id' });
+      };
+      req.onsuccess = e => { this.db = e.target.result; res(this.db); };
+      req.onerror = () => rej(req.error);
+    });
+  },
+
+  async save(id, dataUrl) {
+    const db = await this.open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction('blobs', 'readwrite');
+      const req = tx.objectStore('blobs').put({ id, dataUrl });
+      req.onsuccess = () => res();
+      req.onerror = () => rej(req.error);
+    });
+  },
+
+  async get(id) {
+    const db = await this.open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction('blobs', 'readonly');
+      const req = tx.objectStore('blobs').get(id);
+      req.onsuccess = () => res(req.result?.dataUrl || null);
+      req.onerror = () => rej(req.error);
+    });
+  },
+
+  async delete(id) {
+    const db = await this.open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction('blobs', 'readwrite');
+      const req = tx.objectStore('blobs').delete(id);
+      req.onsuccess = () => res();
+      req.onerror = () => rej(req.error);
+    });
+  },
+
+  async cleanup(activeIds) {
+    const db = await this.open();
+    return new Promise((res) => {
+      const tx = db.transaction('blobs', 'readwrite');
+      const store = tx.objectStore('blobs');
+      const req = store.getAllKeys();
+      req.onsuccess = () => {
+        req.result.forEach(key => {
+          if (!activeIds.includes(key)) store.delete(key);
+        });
+        res();
+      };
+      req.onerror = () => res();
+    });
+  }
+};
+
 // ══════════════════════════════════════
 // BOOT
 // ══════════════════════════════════════
@@ -1006,26 +1068,53 @@ function addFolderFromModal() {
 
 function discardMedia() { capturedBlob=null; capturedUrl=null; closeModal('save-modal'); }
 
-function queueMedia() {
-  const rawName=document.getElementById('sm-name').value.trim();
-  const ext=capturedType==='video'?'.webm':'.jpg';
-  const name=(rawName||'file')+(rawName.endsWith(ext)?'':ext);
-  const folder=document.getElementById('sm-folder').value||'unsorted';
+async function queueMedia() {
+  const rawName = document.getElementById('sm-name').value.trim();
+  const ext = capturedType === 'video' ? '.webm' : '.jpg';
+  const name = (rawName || 'file') + (rawName.endsWith(ext) ? '' : ext);
+  const folder = document.getElementById('sm-folder').value || 'unsorted';
   if (!capturedBlob) return;
-  if (capturedBlob.size>100*1024*1024){ toast('File too large (max 100MB)','err'); return; }
+  if (capturedBlob.size > 200 * 1024 * 1024) { toast('File too large (max 200MB)', 'err'); return; }
 
-  // FIX: both photo AND video stored as dataUrl (base64) — survives reload
-  const item={
-    id:Date.now(), name, folder, type:capturedType,
-    dataUrl: capturedUrl, // always base64 now
-    status:'pending'
+  const id = Date.now();
+  await IDB.save(id, capturedUrl);
+
+  const item = {
+    id,
+    name,
+    folder,
+    type: capturedType,
+    thumb: capturedType === 'photo' ? await makeThumb(capturedUrl) : null,
+    status: 'pending'
   };
   queue.unshift(item);
-  saveQMeta(); renderQueue(); updateStats();
+  saveQMeta();
+  renderQueue();
+  updateStats();
   closeModal('save-modal');
-  toast(`${capturedType==='video'?'🎬':'📷'} Queued: ${name}`,'ok');
+  toast(`${capturedType === 'video' ? '🎬' : '📷'} Queued: ${name}`, 'ok');
   if (navigator.onLine) processQueue();
-  capturedBlob=null; capturedUrl=null;
+  capturedBlob = null;
+  capturedUrl = null;
+}
+
+async function makeThumb(dataUrl) {
+  return new Promise(res => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = 80;
+      c.height = 80;
+      const ctx = c.getContext('2d');
+      const ratio = Math.max(80 / img.width, 80 / img.height);
+      const w = img.width * ratio;
+      const h = img.height * ratio;
+      ctx.drawImage(img, (80 - w) / 2, (80 - h) / 2, w, h);
+      res(c.toDataURL('image/jpeg', 0.5));
+    };
+    img.onerror = () => res(null);
+    img.src = dataUrl;
+  });
 }
 
 // ══════════════════════════════════════
@@ -1035,21 +1124,36 @@ function loadQueue() {
   try { queue=JSON.parse(localStorage.getItem('sv_q')||'[]'); } catch(e){ queue=[]; }
 }
 function saveQMeta() {
-  try { localStorage.setItem('sv_q',JSON.stringify(queue)); } catch(e){
-    // If localStorage full (base64 videos are big), trim oldest done items
-    queue=queue.filter(q=>q.status!=='done').slice(0,20);
-    try{ localStorage.setItem('sv_q',JSON.stringify(queue)); }catch(e2){}
+  const meta = queue.map(q => ({
+    id: q.id,
+    name: q.name,
+    folder: q.folder,
+    type: q.type,
+    thumb: q.thumb,
+    status: q.status,
+    doneAt: q.doneAt || null
+  }));
+  try {
+    localStorage.setItem('sv_q', JSON.stringify(meta));
+  } catch(e) {
+    const trimmed = meta.filter(q => q.status !== 'done').slice(0, 50);
+    localStorage.setItem('sv_q', JSON.stringify(trimmed));
   }
 }
 function renderQueue() {
-  const el=document.getElementById('queue-list');
-  const show=queue.filter(q=>q.status!=='done'||(q.doneAt&&Date.now()-q.doneAt<4000));
-  if (!show.length){ el.innerHTML='<div style="font-family:var(--M);font-size:11px;color:var(--mu);text-align:center;padding:14px">All clear ✓</div>'; return; }
-  el.innerHTML=show.map(it=>`
+  const el = document.getElementById('queue-list');
+  const show = queue.filter(q =>
+    q.status !== 'done' || (q.doneAt && Date.now() - q.doneAt < 4000)
+  );
+  if (!show.length) {
+    el.innerHTML = '<div style="font-family:var(--M);font-size:11px;color:var(--mu);text-align:center;padding:14px">All clear ✓</div>';
+    return;
+  }
+  el.innerHTML = show.map(it => `
     <div class="qi" id="qi-${it.id}">
-      ${it.type==='video'
-        ?`<div class="qi-vid">🎬</div>`
-        :`<img src="${it.dataUrl||''}" class="qi-thumb" onerror="this.style.opacity='.2'"/>`}
+      ${it.type === 'video'
+        ? `<div class="qi-vid">🎬</div>`
+        : `<img src="${it.thumb || ''}" class="qi-thumb" onerror="this.style.opacity='.2'"/>`}
       <div class="qi-info">
         <div class="qi-name">${escHtml(it.name)}</div>
         <div class="qi-meta">📂 ${escHtml(it.folder)} · ${it.type}</div>
@@ -1057,45 +1161,76 @@ function renderQueue() {
       <div class="qi-badge b-${it.status}">${it.status}</div>
     </div>`).join('');
 }
-function clearDone(){ queue=queue.filter(q=>q.status!=='done'); saveQMeta(); renderQueue(); updateStats(); }
+async function clearDone() {
+  const doneIds = queue.filter(q => q.status === 'done').map(q => q.id);
+  await Promise.all(doneIds.map(id => IDB.delete(id)));
+  queue = queue.filter(q => q.status !== 'done');
+  saveQMeta();
+  renderQueue();
+  updateStats();
+}
 
 async function processQueue() {
-  if (!navigator.onLine||!currentUser) return;
-
-  // FIX: check token validity before trying to upload
+  if (!navigator.onLine || !currentUser) return;
   if (!isTokenValid()) {
-    toast('Session expired — please refresh connection in Profile','warn');
+    toast('Session expired — tap Profile → Refresh', 'warn');
     return;
   }
 
-  const pending=queue.filter(q=>q.status==='pending');
+  const pending = queue.filter(q => q.status === 'pending');
   if (!pending.length) return;
-  const bar=document.getElementById('prog-bar');
-  const fill=document.getElementById('prog-fill');
-  bar.classList.add('show'); let done=0;
+  const bar = document.getElementById('prog-bar');
+  const fill = document.getElementById('prog-fill');
+  bar.classList.add('show');
+  let done = 0;
+
   for (const item of pending) {
-    item.status='uploading'; renderQueue();
+    item.status = 'uploading';
+    renderQueue();
     try {
-      // FIX: dataUrl is always base64 now — fetch() works reliably
-      const r=await fetch(item.dataUrl); const blob=await r.blob();
-      await uploadBlob(blob,item.folder,item.name,item.type);
-      item.status='done'; item.doneAt=Date.now();
-      // Clear dataUrl after successful upload to free localStorage space
-      item.dataUrl=null;
-      done++; fill.style.width=`${(done/pending.length)*100}%`;
-      saveQMeta(); renderQueue();
+      const dataUrl = await IDB.get(item.id);
+      if (!dataUrl) {
+        toast(`Blob missing for ${item.name} — removed from queue`, 'warn');
+        item.status = 'done';
+        item.doneAt = Date.now();
+        saveQMeta();
+        renderQueue();
+        continue;
+      }
+
+      const r = await fetch(dataUrl);
+      const blob = await r.blob();
+
+      await uploadBlob(blob, item.folder, item.name, item.type);
+      await IDB.delete(item.id);
+
+      item.status = 'done';
+      item.doneAt = Date.now();
+      done++;
+      fill.style.width = `${(done / pending.length) * 100}%`;
+      saveQMeta();
+      renderQueue();
       toast(`Uploaded: ${item.name}`,'ok');
     } catch(e) {
-      item.status='pending'; renderQueue();
-      // If 401 — token expired mid-session
-      if (e.message.includes('401')||e.message.toLowerCase().includes('auth')) {
+      item.status = 'pending';
+      saveQMeta();
+      renderQueue();
+      if (e.message.includes('401') || e.message.toLowerCase().includes('auth')) {
         toast('Session expired during upload. Tap Profile → Refresh.','warn');
         break;
       }
       toast('Upload failed: '+e.message,'err');
     }
   }
-  setTimeout(()=>{ bar.classList.remove('show'); fill.style.width='0%'; },1200);
+
+  setTimeout(() => {
+    bar.classList.remove('show');
+    fill.style.width = '0%';
+  }, 1200);
+
+  const activeIds = queue.map(q => q.id);
+  await IDB.cleanup(activeIds);
+
   loadGallery();
 }
 
