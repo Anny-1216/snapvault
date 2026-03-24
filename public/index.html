@@ -563,6 +563,7 @@ let lbIndex = 0, galFilter = 'all';
 let gdriveToken = null, gdriveExpiry = 0;
 let msToken = null, msExpiry = 0;
 let tokenWarnInterval = null;
+let queueProcessing = false;
 
 const ST = {
   get storage(){ return localStorage.getItem('sv_st')||null },
@@ -1122,6 +1123,11 @@ async function makeThumb(dataUrl) {
 // ══════════════════════════════════════
 function loadQueue() {
   try { queue=JSON.parse(localStorage.getItem('sv_q')||'[]'); } catch(e){ queue=[]; }
+  if (!Array.isArray(queue)) queue = [];
+  queue.forEach(item => {
+    if (item?.status === 'uploading') item.status = 'pending';
+  });
+  saveQMeta();
 }
 function saveQMeta() {
   const meta = queue.map(q => ({
@@ -1171,67 +1177,79 @@ async function clearDone() {
 }
 
 async function processQueue() {
-  if (!navigator.onLine || !currentUser) return;
-  if (!isTokenValid()) {
-    toast('Session expired — tap Profile → Refresh', 'warn');
-    return;
-  }
+  if (queueProcessing) return;
+  queueProcessing = true;
+  try {
+    if (!navigator.onLine || !currentUser) return;
+    if (!isTokenValid()) {
+      toast('Session expired — tap Profile → Refresh', 'warn');
+      return;
+    }
 
-  const pending = queue.filter(q => q.status === 'pending');
-  if (!pending.length) return;
-  const bar = document.getElementById('prog-bar');
-  const fill = document.getElementById('prog-fill');
-  bar.classList.add('show');
-  let done = 0;
+    const pending = queue.filter(q => q.status === 'pending');
+    if (!pending.length) return;
+    const bar = document.getElementById('prog-bar');
+    const fill = document.getElementById('prog-fill');
+    bar.classList.add('show');
+    let done = 0;
 
-  for (const item of pending) {
-    item.status = 'uploading';
-    renderQueue();
-    try {
-      const dataUrl = await IDB.get(item.id);
-      if (!dataUrl) {
-        toast(`Blob missing for ${item.name} — removed from queue`, 'warn');
+    for (const item of pending) {
+      item.status = 'uploading';
+      saveQMeta();
+      renderQueue();
+      try {
+        const dataUrl = await IDB.get(item.id);
+        if (!dataUrl) {
+          toast(`Blob missing for ${item.name} — removed from queue`, 'warn');
+          item.status = 'done';
+          item.doneAt = Date.now();
+          saveQMeta();
+          renderQueue();
+          continue;
+        }
+
+        const r = await fetch(dataUrl);
+        const blob = await r.blob();
+
+        await uploadBlob(blob, item.folder, item.name, item.type);
+        await IDB.delete(item.id);
+
         item.status = 'done';
         item.doneAt = Date.now();
+        done++;
+        fill.style.width = `${(done / pending.length) * 100}%`;
         saveQMeta();
         renderQueue();
-        continue;
+        toast(`Uploaded: ${item.name}`,'ok');
+      } catch(e) {
+        item.status = 'pending';
+        saveQMeta();
+        renderQueue();
+        if (e.message.includes('401') || e.message.toLowerCase().includes('auth')) {
+          toast('Session expired during upload. Tap Profile → Refresh.','warn');
+          break;
+        }
+        toast('Upload failed: '+e.message,'err');
+      } finally {
+        if (item.status === 'uploading') {
+          item.status = 'pending';
+          saveQMeta();
+        }
       }
-
-      const r = await fetch(dataUrl);
-      const blob = await r.blob();
-
-      await uploadBlob(blob, item.folder, item.name, item.type);
-      await IDB.delete(item.id);
-
-      item.status = 'done';
-      item.doneAt = Date.now();
-      done++;
-      fill.style.width = `${(done / pending.length) * 100}%`;
-      saveQMeta();
-      renderQueue();
-      toast(`Uploaded: ${item.name}`,'ok');
-    } catch(e) {
-      item.status = 'pending';
-      saveQMeta();
-      renderQueue();
-      if (e.message.includes('401') || e.message.toLowerCase().includes('auth')) {
-        toast('Session expired during upload. Tap Profile → Refresh.','warn');
-        break;
-      }
-      toast('Upload failed: '+e.message,'err');
     }
+
+    setTimeout(() => {
+      bar.classList.remove('show');
+      fill.style.width = '0%';
+    }, 1200);
+
+    const activeIds = queue.map(q => q.id);
+    await IDB.cleanup(activeIds);
+
+    loadGallery();
+  } finally {
+    queueProcessing = false;
   }
-
-  setTimeout(() => {
-    bar.classList.remove('show');
-    fill.style.width = '0%';
-  }, 1200);
-
-  const activeIds = queue.map(q => q.id);
-  await IDB.cleanup(activeIds);
-
-  loadGallery();
 }
 
 // ══════════════════════════════════════
