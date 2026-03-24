@@ -834,11 +834,27 @@ function watchOnline() {
 // ══════════════════════════════════════
 async function startCam() {
   try {
-    if (stream) stream.getTracks().forEach(t=>t.stop());
+    if (stream) stream.getTracks().forEach(t => t.stop());
     stream = await navigator.mediaDevices.getUserMedia({
-      video:{facingMode:facing,width:{ideal:1280},height:{ideal:960}}, audio:true
+      video: {
+        facingMode: facing,
+        width: { ideal: 4096 },
+        height: { ideal: 3072 },
+        advanced: [
+          { width: 4096, height: 3072 },
+          { width: 3840, height: 2160 },
+          { width: 1920, height: 1080 }
+        ]
+      },
+      audio: true
     });
-    document.getElementById('video-el').srcObject = stream;
+    const v = document.getElementById('video-el');
+    v.srcObject = stream;
+    v.onloadedmetadata = () => {
+      const track = stream.getVideoTracks()[0];
+      const settings = track.getSettings();
+      console.log(`Camera: ${settings.width}x${settings.height}`);
+    };
     document.getElementById('live-badge').textContent = '● LIVE';
   } catch(e) {
     document.getElementById('live-badge').textContent = '● NO CAM';
@@ -877,12 +893,28 @@ function takePhoto() {
   const v = document.getElementById('video-el');
   if (!v.srcObject) return;
   const c = document.getElementById('canvas-el');
-  c.width=v.videoWidth||1280; c.height=v.videoHeight||960;
-  c.getContext('2d').drawImage(v,0,0);
-  capturedUrl = c.toDataURL('image/jpeg',0.92);
-  c.toBlob(b=>{ capturedBlob=b; capturedType='photo'; openSaveModal(); },'image/jpeg',0.92);
+
+  const track = stream?.getVideoTracks()[0];
+  const settings = track?.getSettings();
+
+  c.width = settings?.width || v.videoWidth || 1280;
+  c.height = settings?.height || v.videoHeight || 960;
+
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(v, 0, 0, c.width, c.height);
+
+  capturedUrl = c.toDataURL('image/jpeg', 1.0);
+  c.toBlob(b => {
+    capturedBlob = b;
+    capturedType = 'photo';
+    openSaveModal();
+  }, 'image/jpeg', 1.0);
+
   const btn = document.getElementById('btn-cap');
-  btn.style.background='#fff'; setTimeout(()=>btn.style.background='',120);
+  btn.style.background = '#fff';
+  setTimeout(() => btn.style.background = '', 120);
 }
 
 function startRec() {
@@ -1309,17 +1341,21 @@ async function loadGDriveGallery() {
   // Fetch files in each subfolder
   for (const sf of subFolders) {
     const fQ=`'${sf.id}' in parents and trashed=false and (mimeType contains 'image/' or mimeType contains 'video/')`;
-    const fRes=await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(fQ)}&fields=files(id,name,mimeType,thumbnailLink,webContentLink)&pageSize=100`,
+    const fRes=await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(fQ)}&fields=files(id,name,mimeType,thumbnailLink,webContentLink,imageMediaMetadata)&pageSize=100`,
       {headers:{Authorization:'Bearer '+token}});
     const fData=await fRes.json();
-    (fData.files||[]).forEach(f=>{
+    (fData.files || []).forEach(f => {
       const isVid=f.mimeType.startsWith('video/');
       allMedia.push({
-        name:f.name, folder:sf.name, type:isVid?'video':'photo',
-        url:`https://drive.google.com/uc?export=view&id=${f.id}`,
-        thumb:f.thumbnailLink||null,
-        downloadUrl:f.webContentLink||null,
-        driveId:f.id
+        name: f.name,
+        folder: sf.name,
+        type: isVid ? 'video' : 'photo',
+        url: `https://lh3.googleusercontent.com/d/${f.id}=s0`,
+        thumb: f.thumbnailLink
+          ? f.thumbnailLink.replace('=s220', '=s400')
+          : `https://lh3.googleusercontent.com/d/${f.id}=s400`,
+        downloadUrl: f.webContentLink || null,
+        driveId: f.id
       });
     });
   }
@@ -1396,19 +1432,95 @@ function renderGalleryGrid() {
 // LIGHTBOX
 // ══════════════════════════════════════
 function openLB(i) {
-  const items=galFilter==='all'?allMedia:allMedia.filter(m=>m.folder===galFilter);
+  const items = galFilter === 'all' ? allMedia : allMedia.filter(m => m.folder === galFilter);
   if (!items[i]) return;
-  lbIndex=i; const m=items[i];
-  const img=document.getElementById('lb-img'), vid=document.getElementById('lb-vid');
-  if (m.type==='video'){ img.style.display='none'; vid.style.display='block'; vid.src=m.url; }
-  else{ vid.style.display='none'; img.style.display='block'; img.src=m.url; }
-  document.getElementById('lb-name').textContent=m.name;
-  document.getElementById('lb-meta').textContent=`📂 ${m.folder} · ${m.type}`;
-  document.getElementById('lb-dl').href=m.downloadUrl||m.url;
-  document.getElementById('lb-dl').download=m.name;
+  lbIndex = i;
+  const m = items[i];
+  const img = document.getElementById('lb-img');
+  const vid = document.getElementById('lb-vid');
+
+  const existing = document.getElementById('lb-iframe');
+  if (existing) existing.remove();
+
+  if (m.type === 'video') {
+    img.style.display = 'none';
+    vid.style.display = 'block';
+    vid.src = m.url;
+  } else {
+    vid.style.display = 'none';
+    img.style.display = 'block';
+
+    img.src = m.thumb || '';
+    img.style.filter = 'blur(4px)';
+    img.style.transition = 'filter 0.3s';
+
+    const st = ST.storage;
+    let fullUrl = m.url;
+
+    if (st === 'gdrive' && m.driveId) {
+      fullUrl = `https://lh3.googleusercontent.com/d/${m.driveId}=s0`;
+    }
+
+    const loader = new Image();
+    loader.onload = () => {
+      img.src = fullUrl;
+      img.style.filter = 'none';
+    };
+    loader.onerror = () => {
+      if (st === 'gdrive' && m.driveId) {
+        img.style.filter = 'none';
+        img.style.display = 'none';
+        showGDriveViewer(m);
+      } else {
+        img.src = m.url;
+        img.style.filter = 'none';
+      }
+    };
+    loader.src = fullUrl;
+  }
+
+  document.getElementById('lb-name').textContent = m.name;
+  document.getElementById('lb-meta').textContent = `📂 ${m.folder} · ${m.type}`;
+  document.getElementById('lb-dl').href = m.downloadUrl || m.url;
+  document.getElementById('lb-dl').download = m.name;
   document.getElementById('lb').classList.remove('hidden');
 }
-function closeLB(){ const v=document.getElementById('lb-vid'); v.pause(); v.src=''; document.getElementById('lb').classList.add('hidden'); }
+
+function showGDriveViewer(m) {
+  const lb = document.getElementById('lb');
+  const existing = document.getElementById('lb-iframe');
+  if (existing) existing.remove();
+
+  const iframe = document.createElement('iframe');
+  iframe.id = 'lb-iframe';
+  iframe.src = `https://drive.google.com/file/d/${m.driveId}/preview`;
+  iframe.style.cssText = `
+    width: 100%;
+    max-width: 600px;
+    height: 70vh;
+    border: none;
+    border-radius: 10px;
+    background: #000;
+  `;
+  const btns = document.getElementById('lb').querySelector('.lb-btns');
+  lb.insertBefore(iframe, btns);
+}
+
+function closeLB() {
+  const v = document.getElementById('lb-vid');
+  v.pause();
+  v.src = '';
+
+  const img = document.getElementById('lb-img');
+  img.style.display = 'none';
+  img.style.filter = 'none';
+  img.src = '';
+
+  const iframe = document.getElementById('lb-iframe');
+  if (iframe) iframe.remove();
+
+  document.getElementById('lb').classList.add('hidden');
+}
 async function copyMediaLink(){
   const items=galFilter==='all'?allMedia:allMedia.filter(m=>m.folder===galFilter);
   if (items[lbIndex]){ await clip(items[lbIndex].url); toast('Link copied!','ok'); }
