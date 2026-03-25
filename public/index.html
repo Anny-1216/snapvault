@@ -14,27 +14,31 @@
 async function forceDownload() {
   const m = galFilter === 'all' ? allMedia[lbIndex] : allMedia.filter(x => x.folder === galFilter)[lbIndex];
   if (!m) return;
+
   const btn = document.getElementById('lb-dl');
   const originalText = btn.innerHTML;
-  btn.innerHTML = '<span class="spin" style="width:12px;height:12px;border-width:2px;margin-right:6px"></span> Downloading...';
+  btn.innerHTML = '<span class="spin" style="width:12px;height:12px;border-width:2px;margin-right:6px"></span>...';
   btn.style.pointerEvents = 'none';
+
   try {
-    const res = await fetch(m.downloadUrl || m.url);
-    if (!res.ok) throw new Error('Network error');
-    const blob = await res.blob();
-    const url = window.URL.createObjectURL(blob);
+    let finalUrl = m.downloadUrl || m.url;
+    
+    // Native OS download bypass for GDrive
+    if (ST.storage === 'gdrive' && m.driveId) {
+      finalUrl = `https://drive.google.com/uc?export=download&id=${m.driveId}`;
+    }
+    
     const a = document.createElement('a');
-    a.style.display = 'none';
-    a.href = url;
+    a.href = finalUrl;
+    a.target = '_blank';
     a.download = m.name || 'download';
     document.body.appendChild(a);
     a.click();
-    window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
-    toast('Download complete!', 'ok');
+    
+    toast('Download triggered!', 'ok');
   } catch(e) {
-    toast('Direct download blocked. Opening file...', 'warn');
-    window.open(m.downloadUrl || m.url, '_blank');
+    toast('Download failed.', 'err');
   } finally {
     btn.innerHTML = originalText;
     btn.style.pointerEvents = 'auto';
@@ -1726,11 +1730,37 @@ function openShareModal(){
   genShareLink();
   document.getElementById('share-modal').classList.remove('hidden');
 }
-function genShareLink(){
-  const f=document.getElementById('share-sel').value;
-  const base=window.location.href.split('?')[0];
-  document.getElementById('share-link').value=`${base}?share=${btoa((currentUser?.id||'u')+'/'+f)}`;
+async function genShareLink(){
+  const f = document.getElementById('share-sel').value;
+  const input = document.getElementById('share-link');
+  input.value = 'Generating secure cloud link...';
+  
+  const st = ST.storage;
+  try {
+    if (st === 'gdrive') {
+      const rootId = await gdGetFolder('SnapVault', gdriveToken, null);
+      const folderId = await gdGetFolder(f, gdriveToken, rootId);
+      if (folderId) {
+        input.value = `https://drive.google.com/drive/folders/${folderId}`;
+      } else {
+        input.value = 'Folder not synced to Drive yet';
+      }
+    } else if (st === 'onedrive') {
+      const res = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/SnapVault/${encodeURIComponent(f)}:/createLink`, {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + msToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'view', scope: 'anonymous' })
+      });
+      const data = await res.json();
+      input.value = data.link ? data.link.webUrl : 'Error generating OneDrive link';
+    } else {
+      input.value = 'Storage not connected';
+    }
+  } catch(e) {
+    input.value = 'Error generating link';
+  }
 }
+
 async function quickShare(f){ document.getElementById('share-sel').value=f; genShareLink(); await clip(document.getElementById('share-link').value); toast('Share link copied: '+f,'ok'); }
 async function copyShare(){ await clip(document.getElementById('share-link').value); toast('Link copied!','ok'); }
 
@@ -1822,27 +1852,31 @@ if ('serviceWorker' in navigator) {
 async function forceDownload() {
   const m = galFilter === 'all' ? allMedia[lbIndex] : allMedia.filter(x => x.folder === galFilter)[lbIndex];
   if (!m) return;
+
   const btn = document.getElementById('lb-dl');
   const originalText = btn.innerHTML;
-  btn.innerHTML = '<span class="spin" style="width:12px;height:12px;border-width:2px;margin-right:6px"></span> Downloading...';
+  btn.innerHTML = '<span class="spin" style="width:12px;height:12px;border-width:2px;margin-right:6px"></span>...';
   btn.style.pointerEvents = 'none';
+
   try {
-    const res = await fetch(m.downloadUrl || m.url);
-    if (!res.ok) throw new Error('Network error');
-    const blob = await res.blob();
-    const url = window.URL.createObjectURL(blob);
+    let finalUrl = m.downloadUrl || m.url;
+    
+    // Native OS download bypass for GDrive
+    if (ST.storage === 'gdrive' && m.driveId) {
+      finalUrl = `https://drive.google.com/uc?export=download&id=${m.driveId}`;
+    }
+    
     const a = document.createElement('a');
-    a.style.display = 'none';
-    a.href = url;
+    a.href = finalUrl;
+    a.target = '_blank';
     a.download = m.name || 'download';
     document.body.appendChild(a);
     a.click();
-    window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
-    toast('Download complete!', 'ok');
+    
+    toast('Download triggered!', 'ok');
   } catch(e) {
-    toast('Direct download blocked. Opening file...', 'warn');
-    window.open(m.downloadUrl || m.url, '_blank');
+    toast('Download failed.', 'err');
   } finally {
     btn.innerHTML = originalText;
     btn.style.pointerEvents = 'auto';
