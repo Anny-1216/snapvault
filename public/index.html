@@ -10,7 +10,47 @@
 <title>SnapVault</title>
 <link rel="manifest" href="/manifest.webmanifest"/>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
+async function forceDownload() {
+  const m = galFilter === 'all' ? allMedia[lbIndex] : allMedia.filter(x => x.folder === galFilter)[lbIndex];
+  if (!m) return;
+  const btn = document.getElementById('lb-dl');
+  const originalText = btn.innerHTML;
+  btn.innerHTML = '<span class="spin" style="width:12px;height:12px;border-width:2px;margin-right:6px"></span> Downloading...';
+  btn.style.pointerEvents = 'none';
+  try {
+    const res = await fetch(m.downloadUrl || m.url);
+    if (!res.ok) throw new Error('Network error');
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = m.name || 'download';
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    toast('Download complete!', 'ok');
+  } catch(e) {
+    toast('Direct download blocked. Opening file...', 'warn');
+    window.open(m.downloadUrl || m.url, '_blank');
+  } finally {
+    btn.innerHTML = originalText;
+    btn.style.pointerEvents = 'auto';
+  }
+}
+
+window.addEventListener('orientationchange', () => {
+  setTimeout(() => {
+    const camTab = document.getElementById('tab-cam');
+    if (camTab && !camTab.classList.contains('hidden')) {
+      startCam();
+    }
+  }, 300);
+});
+
+</script>
 <style>
 :root{
   --bg:#07070f;--bg2:#0d0d1c;--surf:#121220;--surf2:#191929;
@@ -121,7 +161,8 @@ select.inp{cursor:pointer}
 .mode-btn{flex:1;padding:7px;border:none;background:transparent;color:var(--mu2);font-family:var(--F);font-size:12px;font-weight:700;border-radius:16px;cursor:pointer;transition:all .2s;letter-spacing:.4px}
 .mode-btn.on{background:var(--surf2);color:var(--txt)}
 
-.cam-wrap{position:relative;background:#000;border-radius:var(--r2);overflow:hidden;width:100%;aspect-ratio:4/3;border:1px solid var(--bdr2)}
+.cam-wrap{position:relative;background:#000;border-radius:var(--r2);overflow:hidden;width:100%;aspect-ratio:3/4;max-height:65vh;border:1px solid var(--bdr2)}
+@media (orientation: landscape) { .cam-wrap { aspect-ratio: 16/9; } }
 #video-el{width:100%;height:100%;object-fit:cover;display:block}
 .cam-hud{position:absolute;inset:0;pointer-events:none}
 .cam-hud::before,.cam-hud::after{content:'';position:absolute;border-color:rgba(124,110,255,.5);border-style:solid}
@@ -541,7 +582,7 @@ select.inp{cursor:pointer}
   <video id="lb-vid" controls style="display:none"></video>
   <div class="lb-btns">
     <button class="lb-btn lb-ghost" onclick="copyMediaLink()">🔗 Copy Link</button>
-    <a id="lb-dl" class="lb-btn lb-acc" download>⬇ Download</a>
+    <button id="lb-dl" class="lb-btn lb-acc" onclick="forceDownload()">⬇ Download</button>
   </div>
 </div>
 
@@ -1148,9 +1189,7 @@ function saveQMeta() {
 }
 function renderQueue() {
   const el = document.getElementById('queue-list');
-  const show = queue.filter(q =>
-    q.status !== 'done' || (q.doneAt && Date.now() - q.doneAt < 4000)
-  );
+  const show = queue;
   if (!show.length) {
     el.innerHTML = '<div style="font-family:var(--M);font-size:11px;color:var(--mu);text-align:center;padding:14px">All clear ✓</div>';
     return;
@@ -1779,6 +1818,46 @@ document.getElementById('a-pass').addEventListener('keydown',e=>{ if(e.key==='En
 if ('serviceWorker' in navigator) {
   window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
 }
+
+async function forceDownload() {
+  const m = galFilter === 'all' ? allMedia[lbIndex] : allMedia.filter(x => x.folder === galFilter)[lbIndex];
+  if (!m) return;
+  const btn = document.getElementById('lb-dl');
+  const originalText = btn.innerHTML;
+  btn.innerHTML = '<span class="spin" style="width:12px;height:12px;border-width:2px;margin-right:6px"></span> Downloading...';
+  btn.style.pointerEvents = 'none';
+  try {
+    const res = await fetch(m.downloadUrl || m.url);
+    if (!res.ok) throw new Error('Network error');
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = m.name || 'download';
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    toast('Download complete!', 'ok');
+  } catch(e) {
+    toast('Direct download blocked. Opening file...', 'warn');
+    window.open(m.downloadUrl || m.url, '_blank');
+  } finally {
+    btn.innerHTML = originalText;
+    btn.style.pointerEvents = 'auto';
+  }
+}
+
+window.addEventListener('orientationchange', () => {
+  setTimeout(() => {
+    const camTab = document.getElementById('tab-cam');
+    if (camTab && !camTab.classList.contains('hidden')) {
+      startCam();
+    }
+  }, 300);
+});
+
 </script>
 </body>
 </html>
