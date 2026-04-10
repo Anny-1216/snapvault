@@ -10,51 +10,7 @@
 <title>SnapVault</title>
 <link rel="manifest" href="/manifest.webmanifest"/>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
-async function forceDownload() {
-  const m = galFilter === 'all' ? allMedia[lbIndex] : allMedia.filter(x => x.folder === galFilter)[lbIndex];
-  if (!m) return;
-
-  const btn = document.getElementById('lb-dl');
-  const originalText = btn.innerHTML;
-  btn.innerHTML = '<span class="spin" style="width:12px;height:12px;border-width:2px;margin-right:6px"></span>...';
-  btn.style.pointerEvents = 'none';
-
-  try {
-    let finalUrl = m.downloadUrl || m.url;
-    
-    // Native OS download bypass for GDrive
-    if (ST.storage === 'gdrive' && m.driveId) {
-      finalUrl = `https://drive.google.com/uc?export=download&id=${m.driveId}`;
-    }
-    
-    const a = document.createElement('a');
-    a.href = finalUrl;
-    a.target = '_blank';
-    a.download = m.name || 'download';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    
-    toast('Download triggered!', 'ok');
-  } catch(e) {
-    toast('Download failed.', 'err');
-  } finally {
-    btn.innerHTML = originalText;
-    btn.style.pointerEvents = 'auto';
-  }
-}
-
-window.addEventListener('orientationchange', () => {
-  setTimeout(() => {
-    const camTab = document.getElementById('tab-cam');
-    if (camTab && !camTab.classList.contains('hidden')) {
-      startCam();
-    }
-  }, 300);
-});
-
-</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
   --bg:#07070f;--bg2:#0d0d1c;--surf:#121220;--surf2:#191929;
@@ -923,6 +879,7 @@ function enterApp() {
   showScreen('app-screen');
   startTokenWatcher();
   startCam();
+  showZoomControls();
   loadQueue();
   loadFolders();
   loadGallery();
@@ -976,66 +933,44 @@ let focusMode = false;
 let focusTimeout = null;
 async function toggleTapFocus() {
   if (!stream) { toast('Camera not ready', 'err'); return; }
-  focusMode = !focusMode;
-  const btn = document.getElementById('btn-focus');
-  const camWrap = document.getElementById('cam-wrap');
-  const videoEl = document.getElementById('video-el');
-  
-  if (focusMode) {
-    btn.style.background = 'rgba(124, 110, 255, 0.2)';
-    btn.style.color = 'var(--acc)';
-    btn.style.borderColor = 'rgba(124, 110, 255, 0.4)';
-    toast('Focus mode ON - tap to preview (10s)', 'info');
-    
-    // Add click listener to camera preview
-    camWrap.style.cursor = 'pointer';
-    camWrap._focusClickHandler = async (e) => {
-      e.stopPropagation();
-      // Enable camera preview
-      videoEl.style.opacity = '1';
-      videoEl.style.pointerEvents = 'auto';
-      clearTimeout(focusTimeout);
-      
-      // Auto-disable after 10 seconds
-      focusTimeout = setTimeout(() => {
-        videoEl.style.opacity = '0.2';
-        videoEl.style.pointerEvents = 'none';
-        toast('Preview timeout - tap again to enable', 'info');
-      }, 10000);
-    };
-    camWrap.addEventListener('click', camWrap._focusClickHandler);
-    
-    // Initially disable preview
-    videoEl.style.opacity = '0.2';
-    videoEl.style.transition = 'opacity 0.3s';
-    videoEl.style.pointerEvents = 'none';
-  } else {
-    btn.style.background = 'var(--surf2)';
-    btn.style.color = 'var(--mu2)';
-    btn.style.borderColor = 'var(--bdr2)';
-    
-    // Remove click listener
-    if (camWrap._focusClickHandler) {
-      camWrap.removeEventListener('click', camWrap._focusClickHandler);
-      camWrap._focusClickHandler = null;
-    }
-    
-    // Restore preview
-    videoEl.style.opacity = '1';
-    videoEl.style.pointerEvents = 'auto';
-    clearTimeout(focusTimeout);
-    toast('Focus mode OFF', 'info');
-  }
-}
+  const track = stream.getVideoTracks()[0];
+  if (!track) return;
+  const capabilities = track.getCapabilities();
 
-// Feature 4: Zoom controls for HD pictures
-let currentZoom = 1;
-const maxZoom = 5;
-const minZoom = 0.5;
-function zoomIn() {
-  if (currentZoom < maxZoom) {
-    currentZoom = Math.min(currentZoom + 0.5, maxZoom);
-    applyZoom();
+  // Real tap-to-focus on the camera preview
+  const camWrap = document.getElementById('cam-wrap');
+
+  if (!camWrap._focusHandler) {
+    camWrap._focusHandler = async (e) => {
+      const rect = camWrap.getBoundingClientRect();
+      // Normalize coordinates to 0-1 range
+      const x = (e.clientX - rect.left) / rect.width;
+      const y = (e.clientY - rect.top)  / rect.height;
+
+      // Show focus ring at tap position
+      const ring = document.createElement('div');
+      ring.style.cssText = `position:absolute;width:52px;height:52px;border:2px solid var(--acc);
+        border-radius:50%;pointer-events:none;transform:translate(-50%,-50%);
+        left:${x*100}%;top:${y*100}%;transition:transform .15s,opacity .3s;z-index:10`;
+      camWrap.appendChild(ring);
+      setTimeout(() => { ring.style.transform = 'translate(-50%,-50%) scale(0.7)'; ring.style.opacity = '0'; }, 400);
+      setTimeout(() => ring.remove(), 700);
+
+      // Apply focus constraint if supported
+      if (capabilities.focusMode?.includes('manual') && capabilities.pointOfInterest) {
+        try {
+          await track.applyConstraints({ focusMode: 'manual', pointOfInterest: { x, y } });
+        } catch(e) { /* not supported on all devices */ }
+      }
+    };
+    camWrap.addEventListener('click', camWrap._focusHandler);
+    document.getElementById('btn-focus').style.cssText = 'background:rgba(124,110,255,.2);color:var(--acc);border-color:rgba(124,110,255,.4)';
+    toast('Tap anywhere on preview to focus', 'info');
+  } else {
+    camWrap.removeEventListener('click', camWrap._focusHandler);
+    camWrap._focusHandler = null;
+    document.getElementById('btn-focus').style.cssText = '';
+    toast('Tap focus off
   }
 }
 function zoomOut() {
@@ -1068,15 +1003,17 @@ function hideZoomControls() {
 async function startCam() {
   try {
     if (stream) stream.getTracks().forEach(t => t.stop());
+    // Low-res preview for battery efficiency (960x720, max 15fps)
     stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: facing,
-        width: { ideal: 4096 },
-        height: { ideal: 3072 },
+        width: { ideal: 960 },
+        height: { ideal: 720 },
+        frameRate: { ideal: 15 },
         advanced: [
-          { width: 4096, height: 3072 },
-          { width: 3840, height: 2160 },
-          { width: 1920, height: 1080 }
+          { width: 960, height: 720 },
+          { width: 1280, height: 960 },
+          { width: 1920, height: 1440 }
         ]
       },
       audio: true
@@ -1086,9 +1023,11 @@ async function startCam() {
     v.onloadedmetadata = () => {
       const track = stream.getVideoTracks()[0];
       const settings = track.getSettings();
-      console.log(`Camera: ${settings.width}x${settings.height}`);
+      console.log(`Preview: ${settings.width}x${settings.height}@${settings.frameRate}fps`);
     };
     document.getElementById('live-badge').textContent = '● LIVE';
+    flashEnabled = false;
+    document.getElementById('btn-flash').style.cssText = '';
   } catch(e) {
     document.getElementById('live-badge').textContent = '● NO CAM';
     document.getElementById('cam-wrap').innerHTML = `
@@ -1130,37 +1069,59 @@ function takePhoto() {
   if (!v.srcObject) return;
   const c = document.getElementById('canvas-el');
 
+  // Temporarily upgrade to 4K capture
   const track = stream?.getVideoTracks()[0];
-  const settings = track?.getSettings();
+  track?.applyConstraints({
+    video: {
+      width: { ideal: 4096 },
+      height: { ideal: 3072 }
+    }
+  }).then(() => {
+    setTimeout(captureFrame, 200);
+  }).catch(() => {
+    // Fallback to current resolution if 4K not supported
+    captureFrame();
+  });
 
-  c.width = settings?.width || v.videoWidth || 1280;
-  c.height = settings?.height || v.videoHeight || 960;
+  function captureFrame() {
+    const settings = track?.getSettings();
+    c.width = settings?.width || v.videoWidth || 1280;
+    c.height = settings?.height || v.videoHeight || 960;
 
-  const ctx = c.getContext('2d');
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  // Apply zoom transformation when drawing to canvas
-  if (currentZoom !== 1) {
-    const offsetX = (c.width * (currentZoom - 1)) / 2;
-    const offsetY = (c.height * (currentZoom - 1)) / 2;
-    ctx.drawImage(v, -offsetX, -offsetY, c.width * currentZoom, c.height * currentZoom);
-  } else {
-    ctx.drawImage(v, 0, 0, c.width, c.height);
+    const ctx = c.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    // Apply zoom transformation
+    if (currentZoom !== 1) {
+      const offsetX = (c.width * (currentZoom - 1)) / 2;
+      const offsetY = (c.height * (currentZoom - 1)) / 2;
+      ctx.drawImage(v, -offsetX, -offsetY, c.width * currentZoom, c.height * currentZoom);
+    } else {
+      ctx.drawImage(v, 0, 0, c.width, c.height);
+    }
+
+    capturedUrl = c.toDataURL('image/jpeg', 1.0);
+    c.toBlob(b => {
+      capturedBlob = b;
+      capturedType = 'photo';
+      openSaveModal();
+    }, 'image/jpeg', 1.0);
+
+    const btn = document.getElementById('btn-cap');
+    btn.style.background = '#fff';
+    setTimeout(() => btn.style.background = '', 120);
+    
+    // Restore low-res preview immediately after capture
+    track?.applyConstraints({
+      video: {
+        width: { ideal: 960 },
+        height: { ideal: 720 },
+        frameRate: { ideal: 15 }
+      }
+    }).catch(e => console.log('Could not restore preview resolution', e));
+    
+    resetZoom();
   }
-
-  capturedUrl = c.toDataURL('image/jpeg', 1.0);
-  c.toBlob(b => {
-    capturedBlob = b;
-    capturedType = 'photo';
-    openSaveModal();
-  }, 'image/jpeg', 1.0);
-
-  const btn = document.getElementById('btn-cap');
-  btn.style.background = '#fff';
-  setTimeout(() => btn.style.background = '', 120);
-  
-  // Reset zoom after capture
-  resetZoom();
 }
 
 function startRec() {
@@ -1263,8 +1224,6 @@ async function queueMedia() {
 
   const id = Date.now();
   await IDB.save(id, capturedUrl);
-  // Feature 2: Save to local storage with directory structure
-  await saveToLocalStorage(id, capturedUrl, name, folder, capturedType);
 
   const item = {
     id,
@@ -1302,106 +1261,6 @@ async function makeThumb(dataUrl) {
     img.onerror = () => res(null);
     img.src = dataUrl;
   });
-}
-
-// ══════════════════════════════════════
-// LOCAL STORAGE with FOLDER STRUCTURE (Feature 2)
-// ══════════════════════════════════════
-const LS_PREFIX = 'snapvault_local_';
-const LS_INDEX = 'snapvault_index';
-
-async function saveToLocalStorage(id, dataUrl, name, folder, type) {
-  try {
-    // Create folder structure in localStorage
-    const folderPath = LS_PREFIX + 'folders/' + folder;
-    let folderIndex = [];
-    try {
-      folderIndex = JSON.parse(localStorage.getItem(folderPath) || '[]');
-    } catch(e) {
-      folderIndex = [];
-    }
-    
-    const fileEntry = {
-      id: id,
-      name: name,
-      type: type,
-      timestamp: new Date().toISOString(),
-      size: dataUrl.length
-    };
-    
-    folderIndex.push(fileEntry);
-    localStorage.setItem(folderPath, JSON.stringify(folderIndex));
-    
-    // Store actual file data (chunked if needed due to localStorage size limits)
-    const chunkSize = 1024 * 1024 * 4; // 4MB chunks
-    if (dataUrl.length > chunkSize) {
-      // Store in multiple chunks
-      const chunks = Math.ceil(dataUrl.length / chunkSize);
-      localStorage.setItem(LS_PREFIX + 'files/' + folder + '/' + id + '_chunks', chunks.toString());
-      for (let i = 0; i < chunks; i++) {
-        const chunk = dataUrl.substring(i * chunkSize, (i + 1) * chunkSize);
-        localStorage.setItem(LS_PREFIX + 'files/' + folder + '/' + id + '_' + i, chunk);
-      }
-    } else {
-      localStorage.setItem(LS_PREFIX + 'files/' + folder + '/' + id, dataUrl);
-    }
-    
-    // Update global index
-    let globalIndex = {};
-    try {
-      globalIndex = JSON.parse(localStorage.getItem(LS_INDEX) || '{}');
-    } catch(e) {
-      globalIndex = {};
-    }
-    if (!globalIndex[folder]) globalIndex[folder] = [];
-    globalIndex[folder].push(id);
-    localStorage.setItem(LS_INDEX, JSON.stringify(globalIndex));
-    
-  } catch(e) {
-    console.warn('Local storage error:', e);
-    toast('Local storage full - some data may not be saved locally', 'warn');
-  }
-}
-
-function getLocalStorageStats() {
-  try {
-    const index = JSON.parse(localStorage.getItem(LS_INDEX) || '{}');
-    let totalSize = 0;
-    let totalFiles = 0;
-    
-    Object.entries(index).forEach(function([folder, ids]) {
-      const folderPath = LS_PREFIX + 'folders/' + folder;
-      let folderData = [];
-      try {
-        folderData = JSON.parse(localStorage.getItem(folderPath) || '[]');
-      } catch(e) {
-        folderData = [];
-      }
-      totalFiles += folderData.length;
-      folderData.forEach(function(f) {
-        totalSize += f.size || 0;
-      });
-    });
-    
-    return {
-      folders: Object.keys(index),
-      totalFiles: totalFiles,
-      totalSize: (totalSize / (1024 * 1024)).toFixed(2) + ' MB'
-    };
-  } catch(e) {
-    console.warn('Stats error:', e);
-    return { folders: [], totalFiles: 0, totalSize: '0 MB' };
-  }
-}
-
-function clearLocalStorage() {
-  const keys = Object.keys(localStorage).filter(function(k) {
-    return k.startsWith(LS_PREFIX) || k === LS_INDEX;
-  });
-  keys.forEach(function(k) {
-    localStorage.removeItem(k);
-  });
-  toast('Local storage cleared', 'ok');
 }
 
 // ══════════════════════════════════════
