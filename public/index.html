@@ -436,11 +436,18 @@ select.inp{cursor:pointer}
       <div class="cam-badge rec-limit" id="rec-limit">5:00 MAX</div>
     </div>
     <div class="cam-controls">
-      <button class="btn-sm" onclick="flipCam()">↺ Flip</button>
+      <button class="btn-sm" id="btn-flash" onclick="toggleFlash()" title="Toggle flashlight">🔦 Flash</button>
       <button class="btn-capture" id="btn-cap" onclick="handleCapture()">
         <svg id="cap-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
       </button>
-      <button class="btn-sm" onclick="openFolderModal()">+ Folder</button>
+      <button class="btn-sm" id="btn-focus" onclick="toggleTapFocus()" title="Tap to preview (10s)">🎯 Focus</button>
+    </div>
+    <!-- Zoom Controls for HD Preview -->
+    <div id="zoom-controls" style="display:none;margin-top:12px;display:flex;align-items:center;gap:10px;justify-content:center;flex-wrap:wrap">
+      <button class="btn-sm" onclick="zoomOut()">🔍− Zoom Out</button>
+      <span id="zoom-level" style="font-family:var(--M);font-size:12px;color:var(--mu2)">1x</span>
+      <button class="btn-sm" onclick="zoomIn()">🔍+ Zoom In</button>
+      <button class="btn-sm" onclick="resetZoom()">↺ Reset</button>
     </div>
     <div style="margin-top:20px">
       <div class="sec-hd">
@@ -938,6 +945,124 @@ function watchOnline() {
 }
 
 // ══════════════════════════════════════
+// CAMERA FEATURES (4 NEW FEATURES)
+// ══════════════════════════════════════
+// Feature 1: Flashlight toggle
+let flashEnabled = false;
+async function toggleFlash() {
+  if (!stream) { toast('Camera not ready', 'err'); return; }
+  const track = stream.getVideoTracks()[0];
+  if (!track) return;
+  try {
+    const capabilities = track.getCapabilities();
+    if (capabilities.torch) {
+      flashEnabled = !flashEnabled;
+      await track.applyConstraints({ torch: flashEnabled });
+      const btn = document.getElementById('btn-flash');
+      btn.style.background = flashEnabled ? 'rgba(255, 179, 71, 0.2)' : 'var(--surf2)';
+      btn.style.color = flashEnabled ? 'var(--warn)' : 'var(--mu2)';
+      btn.style.borderColor = flashEnabled ? 'rgba(255, 179, 71, 0.4)' : 'var(--bdr2)';
+      toast(flashEnabled ? 'Flash ON' : 'Flash OFF', 'info');
+    } else {
+      toast('Flashlight not supported on this device', 'err');
+    }
+  } catch(e) {
+    toast('Flashlight error: ' + e.message, 'err');
+  }
+}
+
+// Feature 3: Tap-to-focus camera preview (10 seconds)
+let focusMode = false;
+let focusTimeout = null;
+async function toggleTapFocus() {
+  if (!stream) { toast('Camera not ready', 'err'); return; }
+  focusMode = !focusMode;
+  const btn = document.getElementById('btn-focus');
+  const camWrap = document.getElementById('cam-wrap');
+  const videoEl = document.getElementById('video-el');
+  
+  if (focusMode) {
+    btn.style.background = 'rgba(124, 110, 255, 0.2)';
+    btn.style.color = 'var(--acc)';
+    btn.style.borderColor = 'rgba(124, 110, 255, 0.4)';
+    toast('Focus mode ON - tap to preview (10s)', 'info');
+    
+    // Add click listener to camera preview
+    camWrap.style.cursor = 'pointer';
+    camWrap._focusClickHandler = async (e) => {
+      e.stopPropagation();
+      // Enable camera preview
+      videoEl.style.opacity = '1';
+      videoEl.style.pointerEvents = 'auto';
+      clearTimeout(focusTimeout);
+      
+      // Auto-disable after 10 seconds
+      focusTimeout = setTimeout(() => {
+        videoEl.style.opacity = '0.2';
+        videoEl.style.pointerEvents = 'none';
+        toast('Preview timeout - tap again to enable', 'info');
+      }, 10000);
+    };
+    camWrap.addEventListener('click', camWrap._focusClickHandler);
+    
+    // Initially disable preview
+    videoEl.style.opacity = '0.2';
+    videoEl.style.transition = 'opacity 0.3s';
+    videoEl.style.pointerEvents = 'none';
+  } else {
+    btn.style.background = 'var(--surf2)';
+    btn.style.color = 'var(--mu2)';
+    btn.style.borderColor = 'var(--bdr2)';
+    
+    // Remove click listener
+    if (camWrap._focusClickHandler) {
+      camWrap.removeEventListener('click', camWrap._focusClickHandler);
+      camWrap._focusClickHandler = null;
+    }
+    
+    // Restore preview
+    videoEl.style.opacity = '1';
+    videoEl.style.pointerEvents = 'auto';
+    clearTimeout(focusTimeout);
+    toast('Focus mode OFF', 'info');
+  }
+}
+
+// Feature 4: Zoom controls for HD pictures
+let currentZoom = 1;
+const maxZoom = 5;
+const minZoom = 0.5;
+function zoomIn() {
+  if (currentZoom < maxZoom) {
+    currentZoom = Math.min(currentZoom + 0.5, maxZoom);
+    applyZoom();
+  }
+}
+function zoomOut() {
+  if (currentZoom > minZoom) {
+    currentZoom = Math.max(currentZoom - 0.5, minZoom);
+    applyZoom();
+  }
+}
+function resetZoom() {
+  currentZoom = 1;
+  applyZoom();
+}
+function applyZoom() {
+  const videoEl = document.getElementById('video-el');
+  videoEl.style.transform = 'scale(' + currentZoom + ')';
+  videoEl.style.transition = 'transform 0.2s';
+  document.getElementById('zoom-level').textContent = currentZoom.toFixed(1) + 'x';
+}
+function showZoomControls() {
+  document.getElementById('zoom-controls').style.display = 'flex';
+}
+function hideZoomControls() {
+  document.getElementById('zoom-controls').style.display = 'none';
+  resetZoom();
+}
+
+// ══════════════════════════════════════
 // CAMERA
 // ══════════════════════════════════════
 async function startCam() {
@@ -989,6 +1114,9 @@ function setCapMode(m) {
   if (m==='video') ico.innerHTML='<rect x="4" y="4" width="16" height="16" rx="3"/>';
   else             ico.innerHTML='<circle cx="12" cy="12" r="8"/>';
   if (mediaRec && mediaRec.state==='recording') stopRec();
+  // Show/hide zoom controls for photo mode
+  if (m === 'photo') showZoomControls();
+  else hideZoomControls();
 }
 
 function handleCapture() {
@@ -1011,7 +1139,14 @@ function takePhoto() {
   const ctx = c.getContext('2d');
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(v, 0, 0, c.width, c.height);
+  // Apply zoom transformation when drawing to canvas
+  if (currentZoom !== 1) {
+    const offsetX = (c.width * (currentZoom - 1)) / 2;
+    const offsetY = (c.height * (currentZoom - 1)) / 2;
+    ctx.drawImage(v, -offsetX, -offsetY, c.width * currentZoom, c.height * currentZoom);
+  } else {
+    ctx.drawImage(v, 0, 0, c.width, c.height);
+  }
 
   capturedUrl = c.toDataURL('image/jpeg', 1.0);
   c.toBlob(b => {
@@ -1023,6 +1158,9 @@ function takePhoto() {
   const btn = document.getElementById('btn-cap');
   btn.style.background = '#fff';
   setTimeout(() => btn.style.background = '', 120);
+  
+  // Reset zoom after capture
+  resetZoom();
 }
 
 function startRec() {
@@ -1092,6 +1230,7 @@ function openSaveModal() {
   document.getElementById('save-modal').classList.remove('hidden');
   // FIX: 350ms delay so Android keyboard is fully shown before we select
   setTimeout(()=>document.getElementById('sm-name').select(),350);
+  hideZoomControls();
 }
 
 function populateFolderSelect(id) {
@@ -1124,6 +1263,8 @@ async function queueMedia() {
 
   const id = Date.now();
   await IDB.save(id, capturedUrl);
+  // Feature 2: Save to local storage with directory structure
+  await saveToLocalStorage(id, capturedUrl, name, folder, capturedType);
 
   const item = {
     id,
@@ -1161,6 +1302,106 @@ async function makeThumb(dataUrl) {
     img.onerror = () => res(null);
     img.src = dataUrl;
   });
+}
+
+// ══════════════════════════════════════
+// LOCAL STORAGE with FOLDER STRUCTURE (Feature 2)
+// ══════════════════════════════════════
+const LS_PREFIX = 'snapvault_local_';
+const LS_INDEX = 'snapvault_index';
+
+async function saveToLocalStorage(id, dataUrl, name, folder, type) {
+  try {
+    // Create folder structure in localStorage
+    const folderPath = LS_PREFIX + 'folders/' + folder;
+    let folderIndex = [];
+    try {
+      folderIndex = JSON.parse(localStorage.getItem(folderPath) || '[]');
+    } catch(e) {
+      folderIndex = [];
+    }
+    
+    const fileEntry = {
+      id: id,
+      name: name,
+      type: type,
+      timestamp: new Date().toISOString(),
+      size: dataUrl.length
+    };
+    
+    folderIndex.push(fileEntry);
+    localStorage.setItem(folderPath, JSON.stringify(folderIndex));
+    
+    // Store actual file data (chunked if needed due to localStorage size limits)
+    const chunkSize = 1024 * 1024 * 4; // 4MB chunks
+    if (dataUrl.length > chunkSize) {
+      // Store in multiple chunks
+      const chunks = Math.ceil(dataUrl.length / chunkSize);
+      localStorage.setItem(LS_PREFIX + 'files/' + folder + '/' + id + '_chunks', chunks.toString());
+      for (let i = 0; i < chunks; i++) {
+        const chunk = dataUrl.substring(i * chunkSize, (i + 1) * chunkSize);
+        localStorage.setItem(LS_PREFIX + 'files/' + folder + '/' + id + '_' + i, chunk);
+      }
+    } else {
+      localStorage.setItem(LS_PREFIX + 'files/' + folder + '/' + id, dataUrl);
+    }
+    
+    // Update global index
+    let globalIndex = {};
+    try {
+      globalIndex = JSON.parse(localStorage.getItem(LS_INDEX) || '{}');
+    } catch(e) {
+      globalIndex = {};
+    }
+    if (!globalIndex[folder]) globalIndex[folder] = [];
+    globalIndex[folder].push(id);
+    localStorage.setItem(LS_INDEX, JSON.stringify(globalIndex));
+    
+  } catch(e) {
+    console.warn('Local storage error:', e);
+    toast('Local storage full - some data may not be saved locally', 'warn');
+  }
+}
+
+function getLocalStorageStats() {
+  try {
+    const index = JSON.parse(localStorage.getItem(LS_INDEX) || '{}');
+    let totalSize = 0;
+    let totalFiles = 0;
+    
+    Object.entries(index).forEach(function([folder, ids]) {
+      const folderPath = LS_PREFIX + 'folders/' + folder;
+      let folderData = [];
+      try {
+        folderData = JSON.parse(localStorage.getItem(folderPath) || '[]');
+      } catch(e) {
+        folderData = [];
+      }
+      totalFiles += folderData.length;
+      folderData.forEach(function(f) {
+        totalSize += f.size || 0;
+      });
+    });
+    
+    return {
+      folders: Object.keys(index),
+      totalFiles: totalFiles,
+      totalSize: (totalSize / (1024 * 1024)).toFixed(2) + ' MB'
+    };
+  } catch(e) {
+    console.warn('Stats error:', e);
+    return { folders: [], totalFiles: 0, totalSize: '0 MB' };
+  }
+}
+
+function clearLocalStorage() {
+  const keys = Object.keys(localStorage).filter(function(k) {
+    return k.startsWith(LS_PREFIX) || k === LS_INDEX;
+  });
+  keys.forEach(function(k) {
+    localStorage.removeItem(k);
+  });
+  toast('Local storage cleared', 'ok');
 }
 
 // ══════════════════════════════════════
