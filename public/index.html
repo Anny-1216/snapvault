@@ -10,7 +10,51 @@
 <title>SnapVault</title>
 <link rel="manifest" href="/manifest.webmanifest"/>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
+async function forceDownload() {
+  const m = galFilter === 'all' ? allMedia[lbIndex] : allMedia.filter(x => x.folder === galFilter)[lbIndex];
+  if (!m) return;
+
+  const btn = document.getElementById('lb-dl');
+  const originalText = btn.innerHTML;
+  btn.innerHTML = '<span class="spin" style="width:12px;height:12px;border-width:2px;margin-right:6px"></span>...';
+  btn.style.pointerEvents = 'none';
+
+  try {
+    let finalUrl = m.downloadUrl || m.url;
+    
+    // Native OS download bypass for GDrive
+    if (ST.storage === 'gdrive' && m.driveId) {
+      finalUrl = `https://drive.google.com/uc?export=download&id=${m.driveId}`;
+    }
+    
+    const a = document.createElement('a');
+    a.href = finalUrl;
+    a.target = '_blank';
+    a.download = m.name || 'download';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    
+    toast('Download triggered!', 'ok');
+  } catch(e) {
+    toast('Download failed.', 'err');
+  } finally {
+    btn.innerHTML = originalText;
+    btn.style.pointerEvents = 'auto';
+  }
+}
+
+window.addEventListener('orientationchange', () => {
+  setTimeout(() => {
+    const camTab = document.getElementById('tab-cam');
+    if (camTab && !camTab.classList.contains('hidden')) {
+      startCam();
+    }
+  }, 300);
+});
+
+</script>
 <style>
 :root{
   --bg:#07070f;--bg2:#0d0d1c;--surf:#121220;--surf2:#191929;
@@ -970,7 +1014,7 @@ async function toggleTapFocus() {
     camWrap.removeEventListener('click', camWrap._focusHandler);
     camWrap._focusHandler = null;
     document.getElementById('btn-focus').style.cssText = '';
-    toast('Tap focus off
+    toast('Tap focus off')
   }
 }
 function zoomOut() {
@@ -1948,49 +1992,6 @@ document.getElementById('a-pass').addEventListener('keydown',e=>{ if(e.key==='En
 if ('serviceWorker' in navigator) {
   window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
 }
-
-async function forceDownload() {
-  const m = galFilter === 'all' ? allMedia[lbIndex] : allMedia.filter(x => x.folder === galFilter)[lbIndex];
-  if (!m) return;
-
-  const btn = document.getElementById('lb-dl');
-  const originalText = btn.innerHTML;
-  btn.innerHTML = '<span class="spin" style="width:12px;height:12px;border-width:2px;margin-right:6px"></span>...';
-  btn.style.pointerEvents = 'none';
-
-  try {
-    let finalUrl = m.downloadUrl || m.url;
-    
-    // Native OS download bypass for GDrive
-    if (ST.storage === 'gdrive' && m.driveId) {
-      finalUrl = `https://drive.google.com/uc?export=download&id=${m.driveId}`;
-    }
-    
-    const a = document.createElement('a');
-    a.href = finalUrl;
-    a.target = '_blank';
-    a.download = m.name || 'download';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    
-    toast('Download triggered!', 'ok');
-  } catch(e) {
-    toast('Download failed.', 'err');
-  } finally {
-    btn.innerHTML = originalText;
-    btn.style.pointerEvents = 'auto';
-  }
-}
-
-window.addEventListener('orientationchange', () => {
-  setTimeout(() => {
-    const camTab = document.getElementById('tab-cam');
-    if (camTab && !camTab.classList.contains('hidden')) {
-      startCam();
-    }
-  }, 300);
-});
 
 </script>
 </body>
